@@ -3,10 +3,12 @@
 Run from project root:
     uv run python examples/test_server.py
 
-Requires the server to be available via stdio (spawned as subprocess by this script).
+Spawns the server via stdio (subprocess); transcribes Row 1 of a Salem census
+page from sample_data/.
 """
 
 import asyncio
+import json
 import sys
 from pathlib import Path
 
@@ -19,7 +21,7 @@ from mcp.client.stdio import StdioServerParameters, stdio_client
 
 
 async def main() -> None:
-    """Connect to Temporal HTR server, transcribe row 1 of a dummy image."""
+    """Connect to Temporal HTR server, transcribe row 1 of a Salem census image."""
     server_params = StdioServerParameters(
         command="uv",
         args=["run", "python", "-m", "digital_scribe"],
@@ -30,11 +32,11 @@ async def main() -> None:
         async with ClientSession(read_stream, write_stream) as session:
             await session.initialize()
 
-            # Transcribe Row 1 (index 0) of a dummy census image
+            # Transcribe Row 1 (index 0) of 1880 Salem census page
             result = await session.call_tool(
                 "transcribe_census_row",
                 arguments={
-                    "image_path": "examples/fixtures/dummy_census_1880.png",
+                    "image_path": "sample_data/1880A_hi.jpg",
                     "row_index": 0,
                 },
             )
@@ -50,7 +52,6 @@ async def main() -> None:
                         print("Transcription result (Row 1):")
                         print(block.text)
                     elif hasattr(block, "structuredContent") and block.structuredContent:
-                        import json
                         print("Transcription result (Row 1):")
                         print(json.dumps(block.structuredContent, indent=2))
             else:

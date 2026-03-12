@@ -4,6 +4,8 @@
 
 This repository demonstrates how to build a **"Clean-Room Ingestion"** architecture: using local perception (Multimodal Vision/HTR) for privacy and edge-processing, while utilizing frontier cloud reasoning for historical synthesis.
 
+The project uses a **pure Python stack** with [uv](https://docs.astral.sh/uv/) for dependency management.
+
 ## 🛠️ Key Architectural Patterns
 - **Temporal HTR:** Specialized Handwriting Text Recognition tools for 19th-century cursive (focused on 1880 U.S. Census records).
 - **Spatial Metadata Extraction:** Using MCP to analyze 3D photogrammetry models for condition grading and physical wear analysis.

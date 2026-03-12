@@ -2,23 +2,13 @@
 
 Defines where each Census1880Record field appears on the manuscript schedule.
 Column indices follow the official 1880 Population Schedule layout.
+Single source of truth: CENSUS_1880_FORM_GEOMETRY.
 """
 
 from typing import Final
 
-# Column index (1-based) -> Census1880Record field name
+# Unified form geometry: column (1-based) -> field metadata
 # Used by Vision/HTR models to know where to look for each field
-CENSUS_1880_COLUMN_MAP: Final[dict[int, str]] = {
-    1: "dwelling_number",
-    2: "family_number",
-    3: "name",
-    7: "relationship_to_head",
-    8: "marital_status",
-    10: "occupation",
-    15: "birthplace",
-}
-
-# Human-readable labels for each column (for resource output)
 CENSUS_1880_FORM_GEOMETRY: Final[list[dict[str, str | int]]] = [
     {"column": 1, "field": "dwelling_number", "label": "Dwelling Number"},
     {"column": 2, "field": "family_number", "label": "Family Number"},
@@ -28,3 +18,8 @@ CENSUS_1880_FORM_GEOMETRY: Final[list[dict[str, str | int]]] = [
     {"column": 10, "field": "occupation", "label": "Occupation"},
     {"column": 15, "field": "birthplace", "label": "Birthplace"},
 ]
+
+# Derived: column index -> field name (for quick lookup)
+CENSUS_1880_COLUMN_MAP: Final[dict[int, str]] = {
+    entry["column"]: entry["field"] for entry in CENSUS_1880_FORM_GEOMETRY
+}

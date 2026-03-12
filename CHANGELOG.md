@@ -10,13 +10,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **Temporal HTR Server**: FastMCP server (`temporal-htr`) for 1880 U.S. Census handwritten transcription
-- **transcribe_census_row tool**: MCP tool that accepts `image_path` and `row_index`, uses a 19th-century Paleographer system persona, and returns a mock `Census1880Record` with `handwriting_confidence`
-- **1880 Form Geometry**: `CENSUS_1880_COLUMN_MAP` and `CENSUS_1880_FORM_GEOMETRY` constants defining column-to-field mapping for Vision/HTR models (e.g., Column 3 = Name, Column 10 = Occupation)
+- **transcribe_census_row tool**: Capture Layer tool accepting `image_path` and `row_index`, using a 19th-century Paleographer persona, returning a mock `Census1880Record` with deterministic `handwriting_confidence`
+- **1880 Form Geometry**: Unified `CENSUS_1880_FORM_GEOMETRY` (single source of truth) and derived `CENSUS_1880_COLUMN_MAP` for Vision/HTR models
 - **Form Geometry resource**: `digital-scribe://form-geometry/1880` MCP resource exposing form geometry as JSON
-- **examples/test_server.py**: Script that connects to the local Temporal HTR server via stdio and transcribes Row 1 of a dummy image
+- **examples/test_server.py**: Script that spawns the server via stdio and transcribes Row 1 of `sample_data/1880A_hi.jpg`
+- **README**: Explicit mention of pure Python stack and uv for dependency management
 
 ### Changed
 
+- **Determinism fix**: Replaced `hash()`-based confidence with `zlib.adler32()` for reproducible confidence across server restarts
+- **Integration test**: Use actual Salem census image `sample_data/1880A_hi.jpg`; move `import json` to module level
+- **Form geometry consolidation**: `CENSUS_1880_FORM_GEOMETRY` is now the single source of truth; `CENSUS_1880_COLUMN_MAP` is derived
 - **Consolidated structure**: Moved `src/models/census_1880.py` to `src/digital_scribe/models/census_1880.py`
 - **Package exports**: Updated `digital_scribe` package to export `Census1880Record` from `digital_scribe.models`
 - **pyproject.toml**: Simplified to single package `src/digital_scribe` (removed `src/models` as separate package)
