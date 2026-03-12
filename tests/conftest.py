@@ -15,5 +15,5 @@ def isolated_archive_path(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> No
     Resets the lazy store so it is re-created with the temp path on next use.
     """
     archive = tmp_path / "archive.jsonld"
-    monkeypatch.setattr("digital_scribe.server._ARCHIVE_PATH", archive)
+    monkeypatch.setenv("DIGITAL_SCRIBE_ARCHIVE_PATH", str(archive))
     monkeypatch.setattr("digital_scribe.server._KNOWLEDGE_STORE", None)

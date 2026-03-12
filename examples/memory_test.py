@@ -130,11 +130,24 @@ async def main() -> None:
             # Verify test archive is valid JSON-LD for Schema Markup Validator
             archive_text = TEST_ARCHIVE.read_text(encoding="utf-8")
             parsed = json.loads(archive_text)
-            assert isinstance(parsed, list) and len(parsed) >= 2
+            if not isinstance(parsed, list) or len(parsed) < 2:
+                raise RuntimeError(
+                    "Archive must be a list with at least 2 entities"
+                )
             for ent in parsed[:2]:
-                assert ent.get("@context") == "https://schema.org/"
-                assert ent.get("@type") == "Person"
-                assert ent.get("@id", "").startswith("urn:uuid:")
+                if ent.get("@context") != "https://schema.org/":
+                    raise RuntimeError(
+                        f"Entity missing @context: {ent.get('@context')!r}"
+                    )
+                if ent.get("@type") != "Person":
+                    raise RuntimeError(
+                        f"Entity missing @type Person: {ent.get('@type')!r}"
+                    )
+                eid = ent.get("@id", "")
+                if not eid.startswith("urn:uuid:"):
+                    raise RuntimeError(
+                        f"Entity must have urn:uuid:@id: got {eid!r}"
+                    )
             print("✓ data/test_archive.jsonld valid JSON-LD (Schema.org Person)")
 
 

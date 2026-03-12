@@ -13,9 +13,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
 - **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution
 - **DIGITAL_SCRIBE_ARCHIVE_PATH**: Environment variable to override archive path; used by memory_test to target data/test_archive.jsonld
+- **Deterministic fallback IDs**: Legacy entities without @id get urn:uuid:legacy-{i}-{md5(content)} for stable IDs across process restarts
 
 ### Changed
 
+- **Thread-safe reads**: All search methods (search_by_surname, search_by_family_number, search_by_surname_or_family) hold self._lock during _load_graph; eliminates data-race with concurrent ingest
+- **Runtime path resolution**: DIGITAL_SCRIBE_ARCHIVE_PATH resolved inside JSONLDStore.__init__; respects env set after module import
+- **memory_test hardening**: Replaced bare asserts in validation block with explicit RuntimeError checks
+- **conftest**: Uses monkeypatch.setenv for DIGITAL_SCRIBE_ARCHIVE_PATH (archive resolution moved to store)
 - **Name parsing**: Replaced _split_name with _parse_historical_name for correct familyName/givenName mapping
 - **Directory creation**: data/ folder is created only in JSONLDStore.__init__ (when store is instantiated), not on every save
 - **Lazy store instantiation**: server.py creates JSONLDStore only when ingest_resident or cross_reference_resident is first called
@@ -29,6 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Silent corruption**: Atomic write pattern and lock prevent concurrent write collisions and partial writes
 - **Postcondition hardening**: Replaced bare assert with RuntimeError for @id validation; safe in optimized Python (-O)
 - **family_number validation**: cross_reference_resident now rejects family_number < 1 with a clear error message
+- **Dead code**: Removed unreachable len(parts)==1 branch in _parse_historical_name comma-handling
 
 ---
 

@@ -1,7 +1,6 @@
 """Temporal HTR Server — MCP server for 1880 U.S. Census handwritten transcription."""
 
 import json
-import os
 import threading
 import zlib
 from pathlib import Path
@@ -17,9 +16,6 @@ from digital_scribe.models.census_1880 import Census1880Record
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _DATA_DIR = _PROJECT_ROOT / "sample_data"
 _DEFAULT_ARCHIVE = _PROJECT_ROOT / "data" / "archive.jsonld"
-_ARCHIVE_PATH = Path(
-    os.environ.get("DIGITAL_SCRIBE_ARCHIVE_PATH", str(_DEFAULT_ARCHIVE))
-)
 
 _KNOWLEDGE_STORE: JSONLDStore | None = None
 _STORE_LOCK = threading.Lock()
@@ -31,7 +27,7 @@ def _get_knowledge_store() -> JSONLDStore:
     if _KNOWLEDGE_STORE is None:
         with _STORE_LOCK:
             if _KNOWLEDGE_STORE is None:
-                _KNOWLEDGE_STORE = JSONLDStore(_ARCHIVE_PATH)
+                _KNOWLEDGE_STORE = JSONLDStore(default_archive_path=_DEFAULT_ARCHIVE)
     return _KNOWLEDGE_STORE
 
 

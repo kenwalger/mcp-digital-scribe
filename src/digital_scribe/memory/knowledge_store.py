@@ -5,6 +5,7 @@ to a file-based Knowledge Archive. Aligned with Schema.org standards for
 interoperability. Enables cross-referencing by familyName or censusFamilyNumber.
 """
 
+import hashlib
 import json
 import os
 import threading
@@ -31,8 +32,6 @@ def _parse_historical_name(full_name: str) -> tuple[str, str]:
         parts = [p.strip() for p in s.split(",", 1)]
         if len(parts) == 2 and parts[0] and parts[1]:
             return (parts[1], parts[0])  # givenName, familyName
-        if len(parts) == 1 and parts[0]:
-            return (parts[0], "")
 
     # Default: "Given Name(s) Surname" — last token is familyName
     tokens = s.split()
@@ -87,8 +86,18 @@ class JSONLDStore:
     Supports search by surname or family_number (Semantic Memory / Recall).
     """
 
-    def __init__(self, archive_path: str | Path) -> None:
-        self._path = Path(archive_path)
+    def __init__(
+        self,
+        archive_path: str | Path | None = None,
+        default_archive_path: str | Path | None = None,
+    ) -> None:
+        """Resolve archive path at runtime. Respects DIGITAL_SCRIBE_ARCHIVE_PATH env if set after import."""
+        resolved = archive_path
+        if resolved is None:
+            resolved = os.environ.get("DIGITAL_SCRIBE_ARCHIVE_PATH") or default_archive_path
+        if resolved is None:
+            resolved = Path("data") / "archive.jsonld"
+        self._path = Path(resolved)
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._lock = threading.Lock()
 
@@ -146,20 +155,22 @@ class JSONLDStore:
         if not surname_clean:
             return []
         surname_lower = surname_clean.lower()
-        entities = self._load_graph()
-        return [
-            e for e in entities
-            if (e.get("familyName") or "").lower() == surname_lower
-        ]
+        with self._lock:
+            entities = self._load_graph()
+            return [
+                e for e in entities
+                if (e.get("familyName") or "").lower() == surname_lower
+            ]
 
     def search_by_family_number(self, family_number: int) -> list[dict]:
         """Return entities with the given censusFamilyNumber."""
-        entities = self._load_graph()
-        return [
-            e
-            for e in entities
-            if e.get("censusFamilyNumber") == family_number
-        ]
+        with self._lock:
+            entities = self._load_graph()
+            return [
+                e
+                for e in entities
+                if e.get("censusFamilyNumber") == family_number
+            ]
 
     def search_by_surname_or_family(
         self,
@@ -169,32 +180,37 @@ class JSONLDStore:
         """Search by surname and/or family_number. Combines results (OR), deduplicated by @id.
 
         Loads the graph once and filters in-memory for consistent fallback IDs.
+        Uses deterministic content-hash for legacy entities without @id.
         """
         if not surname and family_number is None:
             return []
-        entities = self._load_graph()
-        candidates: list[dict] = []
-        surname_lower = (surname or "").strip().lower() if surname else ""
-        for e in entities:
-            match_surname = (
-                bool(surname_lower)
-                and (e.get("familyName") or "").lower() == surname_lower
-            )
-            match_family = (
-                family_number is not None
-                and family_number >= 1
-                and e.get("censusFamilyNumber") == family_number
-            )
-            if match_surname or match_family:
-                candidates.append(e)
-        seen_ids: set[str] = set()
-        results: list[dict] = []
-        for i, e in enumerate(candidates):
-            eid = e.get("@id")
-            if not eid or not isinstance(eid, str):
-                eid = f"urn:uuid:legacy-{i}-{id(e)}"
-                e = {**e, "@id": eid}
-            if eid not in seen_ids:
-                seen_ids.add(eid)
-                results.append(e)
+        with self._lock:
+            entities = self._load_graph()
+            candidates: list[dict] = []
+            surname_lower = (surname or "").strip().lower() if surname else ""
+            for e in entities:
+                match_surname = (
+                    bool(surname_lower)
+                    and (e.get("familyName") or "").lower() == surname_lower
+                )
+                match_family = (
+                    family_number is not None
+                    and family_number >= 1
+                    and e.get("censusFamilyNumber") == family_number
+                )
+                if match_surname or match_family:
+                    candidates.append(e)
+            seen_ids: set[str] = set()
+            results: list[dict] = []
+            for i, e in enumerate(candidates):
+                eid = e.get("@id")
+                if not eid or not isinstance(eid, str):
+                    content_hash = hashlib.md5(
+                        json.dumps(e, sort_keys=True).encode()
+                    ).hexdigest()
+                    eid = f"urn:uuid:legacy-{i}-{content_hash}"
+                    e = {**e, "@id": eid}
+                if eid not in seen_ids:
+                    seen_ids.add(eid)
+                    results.append(e)
         return results
