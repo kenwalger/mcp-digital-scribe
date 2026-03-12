@@ -9,6 +9,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **_parse_historical_name**: Robust name parsing for Schema.org Person; handles "Surname, Given Name" and multi-word given names (e.g. "Mary Ann Jones")
+- **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
+- **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution
+
+### Changed
+
+- **Name parsing**: Replaced _split_name with _parse_historical_name for correct familyName/givenName mapping
+- **Directory creation**: data/ folder is created only in JSONLDStore.__init__ (when store is instantiated), not on every save
+- **Lazy store instantiation**: server.py creates JSONLDStore only when ingest_resident or cross_reference_resident is first called
+- **Deduplication fix**: search_by_surname_or_family no longer drops entities without @id; assigns urn:uuid:legacy-* fallback for legacy records; ingest enforces @id on all new entities
+
+### Fixed
+
+- **Silent corruption**: Atomic write pattern and lock prevent concurrent write collisions and partial writes
+
+---
+
+### Added (prior)
+
 - **JSONLDStore** (`memory/knowledge_store.py`): Semantic Memory layer; ingests Census1880Record, transforms to Schema.org Person JSON-LD (Schema.org-aligned), persists to `data/archive.jsonld`; search by familyName or censusFamilyNumber
 - **ingest_resident tool**: MCP tool to ingest a census record into the Knowledge Archive (Persistence)
 - **cross_reference_resident tool**: MCP tool to search the archive by surname and/or family_number (Recall / Semantic Memory)

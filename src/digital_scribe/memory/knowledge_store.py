@@ -6,20 +6,41 @@ interoperability. Enables cross-referencing by familyName or censusFamilyNumber.
 """
 
 import json
+import os
+import threading
 import uuid
 from pathlib import Path
 
 from digital_scribe.models.census_1880 import Census1880Record, DITTO_MARKS, DITTOABLE_FIELDS
 
 
-def _split_name(full_name: str) -> tuple[str, str]:
-    """Split name by first space: givenName, familyName."""
-    parts = full_name.strip().split(None, 1)
-    if not parts:
+def _parse_historical_name(full_name: str) -> tuple[str, str]:
+    """Parse historical census name into givenName and familyName (Schema.org Person).
+
+    Handles:
+    - "Surname, Given Name" (e.g. "Smith, John")
+    - Multi-word given names (e.g. "Mary Ann Jones" → givenName="Mary Ann", familyName="Jones")
+    - Default "Given Name" order (e.g. "John Smith" → givenName="John", familyName="Smith")
+    """
+    s = full_name.strip()
+    if not s:
         return ("", "")
-    if len(parts) == 1:
-        return (parts[0], "")
-    return (parts[0], parts[1])
+
+    # "Surname, Given Name" format
+    if "," in s:
+        parts = [p.strip() for p in s.split(",", 1)]
+        if len(parts) == 2 and parts[0] and parts[1]:
+            return (parts[1], parts[0])  # givenName, familyName
+        if len(parts) == 1 and parts[0]:
+            return (parts[0], "")
+
+    # Default: "Given Name(s) Surname" — last token is familyName
+    tokens = s.split()
+    if not tokens:
+        return ("", "")
+    if len(tokens) == 1:
+        return (tokens[0], "")
+    return (" ".join(tokens[:-1]), tokens[-1])
 
 
 def _record_to_jsonld_entity(record: Census1880Record, entity_id: str | None = None) -> dict:
@@ -33,7 +54,7 @@ def _record_to_jsonld_entity(record: Census1880Record, entity_id: str | None = N
     if entity_id is None:
         entity_id = f"urn:uuid:{uuid.uuid4()}"
 
-    given, family = _split_name(record.name)
+    given, family = _parse_historical_name(record.name)
 
     entity = {
         "@context": "https://schema.org/",
@@ -69,6 +90,7 @@ class JSONLDStore:
     def __init__(self, archive_path: str | Path) -> None:
         self._path = Path(archive_path)
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._lock = threading.Lock()
 
     def _load_graph(self) -> list[dict]:
         """Load existing entities from the archive file."""
@@ -86,18 +108,20 @@ class JSONLDStore:
         return [data] if isinstance(data, dict) else []
 
     def _save_graph(self, entities: list[dict]) -> None:
-        """Persist entities to the archive file."""
-        self._path.parent.mkdir(parents=True, exist_ok=True)
-        self._path.write_text(
+        """Persist entities using write-to-temp + os.replace for atomic writes."""
+        tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
+        tmp_path.write_text(
             json.dumps(entities, indent=2, ensure_ascii=False),
             encoding="utf-8",
         )
+        os.replace(tmp_path, self._path)
 
     def ingest(self, record: Census1880Record) -> str:
         """Ingest a Census1880Record, transform to JSON-LD, append to archive. Returns entity @id.
 
         Knowledge Stewardship: Rejects records with unresolved ditto marks.
         Call resolve_ditto_marks(previous_record) before ingest.
+        Atomic: uses Lock + write-to-temp + os.replace to prevent corruption.
         """
         for field in DITTOABLE_FIELDS:
             val = getattr(record, field)
@@ -106,11 +130,13 @@ class JSONLDStore:
                     f"Knowledge Stewardship: resolve ditto marks before ingest. "
                     f"Field '{field}' contains raw ditto {val!r}."
                 )
-        entities = self._load_graph()
         entity_id = f"urn:uuid:{uuid.uuid4()}"
         entity = _record_to_jsonld_entity(record, entity_id)
-        entities.append(entity)
-        self._save_graph(entities)
+        assert "@id" in entity and entity["@id"].startswith("urn:uuid:")
+        with self._lock:
+            entities = self._load_graph()
+            entities.append(entity)
+            self._save_graph(entities)
         return entity_id
 
     def search_by_surname(self, surname: str) -> list[dict]:
@@ -139,7 +165,7 @@ class JSONLDStore:
         surname: str | None = None,
         family_number: int | None = None,
     ) -> list[dict]:
-        """Search by surname and/or family_number. Combines results (OR)."""
+        """Search by surname and/or family_number. Combines results (OR), deduplicated by @id."""
         if not surname and family_number is None:
             return []
         seen_ids: set[str] = set()
@@ -149,9 +175,12 @@ class JSONLDStore:
             candidates.extend(self.search_by_surname(surname))
         if family_number is not None and family_number >= 1:
             candidates.extend(self.search_by_family_number(family_number))
-        for e in candidates:
+        for i, e in enumerate(candidates):
             eid = e.get("@id")
-            if eid and eid not in seen_ids:
+            if not eid or not isinstance(eid, str):
+                eid = f"urn:uuid:legacy-{i}-{id(e)}"
+                e = {**e, "@id": eid}
+            if eid not in seen_ids:
                 seen_ids.add(eid)
                 results.append(e)
         return results

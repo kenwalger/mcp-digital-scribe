@@ -15,7 +15,16 @@ from digital_scribe.models.census_1880 import Census1880Record
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _DATA_DIR = _PROJECT_ROOT / "sample_data"
 _ARCHIVE_PATH = _PROJECT_ROOT / "data" / "archive.jsonld"
-_KNOWLEDGE_STORE = JSONLDStore(_ARCHIVE_PATH)
+
+_KNOWLEDGE_STORE: JSONLDStore | None = None
+
+
+def _get_knowledge_store() -> JSONLDStore:
+    """Lazy-instantiate the store on first use. Data dir is created only when instantiated."""
+    global _KNOWLEDGE_STORE
+    if _KNOWLEDGE_STORE is None:
+        _KNOWLEDGE_STORE = JSONLDStore(_ARCHIVE_PATH)
+    return _KNOWLEDGE_STORE
 
 
 def _safe_resolve_path(image_path: str) -> Path:
@@ -144,7 +153,7 @@ def ingest_resident(record: dict[str, Any]) -> dict[str, Any]:
     so it can be recalled by cross_reference_resident.
     """
     parsed = Census1880Record.model_validate(record)
-    entity_id = _KNOWLEDGE_STORE.ingest(parsed)
+    entity_id = _get_knowledge_store().ingest(parsed)
     return {"status": "ingested", "@id": entity_id}
 
 
@@ -161,7 +170,7 @@ def cross_reference_resident(
     """
     if not (surname or family_number is not None):
         raise ValueError("Provide surname and/or family_number")
-    results = _KNOWLEDGE_STORE.search_by_surname_or_family(
+    results = _get_knowledge_store().search_by_surname_or_family(
         surname=surname,
         family_number=family_number,
     )
