@@ -2,6 +2,7 @@
 
 import json
 import zlib
+from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
 
@@ -59,6 +60,10 @@ def transcribe_census_row(image_path: str, row_index: int) -> dict:
     """
     if row_index < 0:
         raise ValueError("row_index must be >= 0")
+
+    path = Path(image_path)
+    if not path.exists():
+        raise FileNotFoundError(f"Image not found: {image_path}")
 
     # Mock implementation: deterministic confidence via adler32 for reproducibility
     confidence = _deterministic_confidence(image_path, row_index)

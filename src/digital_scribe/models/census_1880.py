@@ -2,7 +2,7 @@
 
 from typing import Self
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class Census1880Record(BaseModel):
@@ -60,10 +60,10 @@ class Census1880Record(BaseModel):
         le=1.0,
     )
 
-    model_config = {
-        "str_strip_whitespace": True,
-        "extra": "forbid",
-    }
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        extra="forbid",
+    )
 
     def resolve_ditto_marks(self, previous_record: "Census1880Record | None") -> Self:
         """Logic for inheriting values from previous_record when "do." or '"' is detected.
