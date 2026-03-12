@@ -1,8 +1,10 @@
 """1880 U.S. Census form geometry — column-to-field mapping for vision/HTR models.
 
-Defines where each Census1880Record field appears on the manuscript schedule.
-Column indices follow the official 1880 Population Schedule layout.
-Single source of truth: CENSUS_1880_FORM_GEOMETRY.
+This is a focused subset of the 1880 U.S. Census Population Schedule, prioritizing
+genealogical identifiers (name, relationship, birthplace) over the full statistical
+columns (e.g., health, literacy, months unemployed). Defines where each
+Census1880Record field appears on the manuscript schedule. Column indices follow
+the official layout. Single source of truth: CENSUS_1880_FORM_GEOMETRY.
 """
 
 from typing import Final

@@ -35,7 +35,8 @@ def get_1880_form_geometry() -> str:
 def _deterministic_confidence(image_path: str, row_index: int) -> float:
     """Produce reproducible confidence in [0.75, 0.97] from image_path + row_index."""
     raw = zlib.adler32(f"{image_path}{row_index}".encode())
-    return round(0.75 + (raw % 100) / 100 * 0.22, 2)
+    # raw%100 in [0,99]; /99 maps to [0,1]; *0.22 gives [0,0.22]; +0.75 → [0.75, 0.97]
+    return round(0.75 + (raw % 100) / 99.0 * 0.22, 2)
 
 
 @mcp.tool()
@@ -56,6 +57,9 @@ def transcribe_census_row(image_path: str, row_index: int) -> dict:
         relationship_to_head, marital_status, occupation, birthplace,
         and handwriting_confidence.
     """
+    if row_index < 0:
+        raise ValueError("row_index must be >= 0")
+
     # Mock implementation: deterministic confidence via adler32 for reproducibility
     confidence = _deterministic_confidence(image_path, row_index)
 

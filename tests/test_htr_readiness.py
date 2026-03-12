@@ -72,3 +72,42 @@ def test_presidio_importable() -> None:
     from presidio_analyzer import AnalyzerEngine  # noqa: F401
 
     assert AnalyzerEngine is not None
+
+
+def test_transcribe_rejects_negative_row_index() -> None:
+    """transcribe_census_row raises ValueError for row_index < 0."""
+    from digital_scribe.server import transcribe_census_row
+
+    with pytest.raises(ValueError, match="row_index must be >= 0"):
+        transcribe_census_row("sample_data/x.jpg", -1)
+
+
+def test_census_record_rejects_empty_strings() -> None:
+    """String fields reject empty strings (min_length=1)."""
+    with pytest.raises(ValueError):
+        Census1880Record(
+            dwelling_number=1,
+            family_number=1,
+            name="John",
+            relationship_to_head="",
+            marital_status="Married",
+            occupation="Farmer",
+            birthplace="New York",
+            handwriting_confidence=0.9,
+        )
+
+
+def test_resolve_ditto_marks_placeholder() -> None:
+    """resolve_ditto_marks exists and returns self (placeholder for Knowledge Graph phase)."""
+    record = Census1880Record(
+        dwelling_number=1,
+        family_number=1,
+        name="John Smith",
+        relationship_to_head="Head",
+        marital_status="Married",
+        occupation="do.",
+        birthplace="New York",
+        handwriting_confidence=0.9,
+    )
+    result = record.resolve_ditto_marks(None)
+    assert result is record
