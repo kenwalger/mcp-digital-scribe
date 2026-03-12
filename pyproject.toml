@@ -16,7 +16,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/digital_scribe", "src/models"]
+packages = ["src/digital_scribe"]
 
 [dependency-groups]
 dev = [

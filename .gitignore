@@ -22,5 +22,8 @@ htmlcov/
 .env
 .env.local
 
+# Commit scaffolding
+commit-message.txt
+
 # SpaCy
 *.bin
