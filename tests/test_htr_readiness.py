@@ -89,6 +89,34 @@ def test_census_record_rejects_empty_strings() -> None:
         )
 
 
+def test_resolve_ditto_marks_raises_on_chained_ditto() -> None:
+    """resolve_ditto_marks raises RecursiveDittoError when previous_record also has ditto."""
+    from digital_scribe.models.census_1880 import RecursiveDittoError
+
+    previous = Census1880Record(
+        dwelling_number=1,
+        family_number=1,
+        name="John Smith",
+        relationship_to_head="Head",
+        marital_status="Married",
+        occupation="do.",  # previous also has ditto — chained
+        birthplace="New York",
+        handwriting_confidence=0.9,
+    )
+    record = Census1880Record(
+        dwelling_number=1,
+        family_number=1,
+        name="Mary",
+        relationship_to_head="Wife",
+        marital_status="Married",
+        occupation="do.",
+        birthplace="New York",
+        handwriting_confidence=0.85,
+    )
+    with pytest.raises(RecursiveDittoError, match="Chained ditto.*chronological"):
+        record.resolve_ditto_marks(previous)
+
+
 def test_resolve_ditto_marks_with_previous() -> None:
     """resolve_ditto_marks copies values from previous_record when ditto marks detected."""
     previous = Census1880Record(

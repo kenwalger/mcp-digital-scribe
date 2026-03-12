@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **RecursiveDittoError**: Raised when previous_record also has a ditto in a field; forces chronological resolution
+- **DITTOABLE_FIELDS**: Module-level tuple for canonical dittoable field list
 - **_safe_resolve_path helper**: Validates image_path stays within project data directory; raises PermissionError("Access Denied") for absolute paths or path traversal (../)
 - **GeometryEntry TypedDict**: `form_geometry.GeometryEntry` with keys `column`, `field`, `description` — fixes `Final[dict[int, str]]` typing
 - **Fail-fast path validation**: `transcribe_census_row` raises `FileNotFoundError` when `image_path` does not exist (pathlib.Path)
@@ -23,6 +25,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Chained ditto resolution**: resolve_ditto_marks raises RecursiveDittoError when previous_record has ditto in same field
+- **salem_test consistency**: Uses DITTO_MARKS and DITTOABLE_FIELDS from model; marital_status in detection loop
+- **transcribe_census_row**: Return type -> dict[str, Any] for static analysis
+- **Blog-ready comments**: Inline @resource (Data) vs @tool (Action) in server.py
 - **Secure path resolution**: `_safe_resolve_path` enforces paths within sample_data/; rejects ../ and absolute paths with Access Denied
 - **DITTO_MARKS**: Module-level frozenset with specific patterns ("do.", '"', '""', "''", "do" as standalone); marital_status added to resolve_ditto_marks
 - **Test reorganization**: test_transcribe_rejects_negative_row_index moved to test_server_logic.py

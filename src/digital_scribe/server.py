@@ -3,6 +3,7 @@
 import json
 import zlib
 from pathlib import Path
+from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
@@ -51,6 +52,8 @@ mcp = FastMCP(
 )
 
 
+# @resource = Data: read-only content the client can fetch (e.g. form geometry).
+# @tool   = Action: an operation the client invokes with arguments (e.g. transcribe).
 @mcp.resource("digital-scribe://form-geometry/1880")
 def get_1880_form_geometry() -> str:
     """Return the 1880 Census form geometry (column-to-field mapping) for Vision/HTR models."""
@@ -71,7 +74,7 @@ def _deterministic_confidence(image_path: str, row_index: int) -> float:
 
 
 @mcp.tool()
-def transcribe_census_row(image_path: str, row_index: int) -> dict:
+def transcribe_census_row(image_path: str, row_index: int) -> dict[str, Any]:
     """Transcribe a single row from an 1880 Census manuscript image into a structured record.
 
     Part of the Capture Layer in the Digital Scribe knowledge system: converts

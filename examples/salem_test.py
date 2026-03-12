@@ -15,6 +15,7 @@ from pathlib import Path
 project_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
+from digital_scribe.models.census_1880 import DITTO_MARKS, DITTOABLE_FIELDS
 from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
@@ -74,10 +75,10 @@ async def main() -> None:
             print("Full Census1880Record (JSON):")
             print(json.dumps(record, indent=2))
 
-            # Ditto verification: flag fields that may need post-processing
-            for field in ("occupation", "birthplace", "name", "relationship_to_head"):
+            # Ditto verification: use canonical DITTO_MARKS; includes marital_status
+            for field in DITTOABLE_FIELDS:
                 val = record.get(field, "")
-                if val in ("do.", '"', "do", "''"):
+                if val in DITTO_MARKS:
                     print(f"\n[Ditto detected] {field}: {val!r} → post-processor should resolve")
 
 
