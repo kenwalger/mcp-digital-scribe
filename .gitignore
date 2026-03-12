@@ -18,6 +18,9 @@ build/
 .coverage
 htmlcov/
 
+# Knowledge archive (ephemeral for tests)
+data/archive.jsonld
+
 # Environment
 .env
 .env.local
@@ -27,3 +30,4 @@ commit-message.txt
 
 # SpaCy
 *.bin
+research/

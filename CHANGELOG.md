@@ -9,6 +9,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **JSONLDStore** (`memory/knowledge_store.py`): Semantic Memory layer; ingests Census1880Record, transforms to Schema.org Person JSON-LD (Schema.org-aligned), persists to `data/archive.jsonld`; search by familyName or censusFamilyNumber
+- **ingest_resident tool**: MCP tool to ingest a census record into the Knowledge Archive (Persistence)
+- **cross_reference_resident tool**: MCP tool to search the archive by surname and/or family_number (Recall / Semantic Memory)
+- **examples/memory_test.py**: Memory-Aware Agent flow — Capture → Resolve → Ingest → Recall; validates two consecutive rows with same family_number can recall each other
 - **RecursiveDittoError**: Raised when previous_record also has a ditto in a field; forces chronological resolution
 - **DITTOABLE_FIELDS**: Module-level tuple for canonical dittoable field list
 - **_safe_resolve_path helper**: Validates image_path stays within project data directory; raises PermissionError("Access Denied") for absolute paths or path traversal (../)
@@ -25,6 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Schema.org alignment**: JSON-LD now uses givenName/familyName (split by first space), hasOccupation (nested Occupation), birthPlace (nested Place); @context "https://schema.org/"
+- **Unique identifiers**: @id uses urn:uuid for every entity
+- **Semantic recall**: cross_reference_resident queries familyName (Schema.org) and censusFamilyNumber
+- **Knowledge Stewardship**: ingest_resident rejects records with unresolved ditto marks; forces resolve_ditto_marks before persistence
+- **Memory lifecycle**: Orchestrator (memory_test) follows agentic_memory.md: Capture (transcribe) → Resolve (ditto) → Ingest (JSONLDStore) → Recall (cross_reference_resident)
 - **Chained ditto resolution**: resolve_ditto_marks raises RecursiveDittoError when previous_record has ditto in same field
 - **salem_test consistency**: Uses DITTO_MARKS and DITTOABLE_FIELDS from model; marital_status in detection loop
 - **transcribe_census_row**: Return type -> dict[str, Any] for static analysis

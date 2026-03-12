@@ -7,12 +7,15 @@ from typing import Any
 
 from mcp.server.fastmcp import FastMCP
 
-from digital_scribe.models.census_1880 import Census1880Record
 from digital_scribe.form_geometry import CENSUS_1880_FORM_GEOMETRY
+from digital_scribe.memory.knowledge_store import JSONLDStore
+from digital_scribe.models.census_1880 import Census1880Record
 
 # Project root: parent of src/ (server.py lives in src/digital_scribe/)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 _DATA_DIR = _PROJECT_ROOT / "sample_data"
+_ARCHIVE_PATH = _PROJECT_ROOT / "data" / "archive.jsonld"
+_KNOWLEDGE_STORE = JSONLDStore(_ARCHIVE_PATH)
 
 
 def _safe_resolve_path(image_path: str) -> Path:
@@ -130,3 +133,36 @@ def transcribe_census_row(image_path: str, row_index: int) -> dict[str, Any]:
         handwriting_confidence=confidence,
     )
     return record.model_dump()
+
+
+# Semantic Memory (Long-Term Knowledge): ingest and recall residents
+@mcp.tool()
+def ingest_resident(record: dict[str, Any]) -> dict[str, Any]:
+    """Ingest a Census1880Record into the Knowledge Archive (Semantic Memory).
+
+    Transforms the record to JSON-LD (Schema.org Person) and persists it
+    so it can be recalled by cross_reference_resident.
+    """
+    parsed = Census1880Record.model_validate(record)
+    entity_id = _KNOWLEDGE_STORE.ingest(parsed)
+    return {"status": "ingested", "@id": entity_id}
+
+
+@mcp.tool()
+def cross_reference_resident(
+    surname: str | None = None,
+    family_number: int | None = None,
+) -> dict[str, Any]:
+    """Search the Knowledge Archive for residents by surname or family number.
+
+    Semantic Memory (Long-Term Knowledge) layer: allows the Scribe to recall
+    residents from previous pages or census years. Provide at least one of
+    surname or family_number.
+    """
+    if not (surname or family_number is not None):
+        raise ValueError("Provide surname and/or family_number")
+    results = _KNOWLEDGE_STORE.search_by_surname_or_family(
+        surname=surname,
+        family_number=family_number,
+    )
+    return {"count": len(results), "residents": results}
