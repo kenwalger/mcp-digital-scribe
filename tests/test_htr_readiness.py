@@ -2,7 +2,7 @@
 
 import pytest
 
-from models.census_1880 import Census1880Record
+from digital_scribe.models.census_1880 import Census1880Record
 
 
 def test_census_1880_record_creation() -> None:
