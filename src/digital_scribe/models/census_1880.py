@@ -68,7 +68,23 @@ class Census1880Record(BaseModel):
     def resolve_ditto_marks(self, previous_record: "Census1880Record | None") -> Self:
         """Logic for inheriting values from previous_record when "do." or '"' is detected.
 
-        Placeholder for the Knowledge Graph phase: resolves ditto marks by copying
-        values from the prior row. Not yet implemented.
+        When occupation, birthplace, name, or relationship_to_head contains a ditto
+        mark (e.g. "do.", '"', "do", "''"), copies the value from previous_record.
+        Returns a new record; does not mutate self.
         """
-        return self
+        if previous_record is None:
+            return self
+
+        DITTO_MARKS = frozenset(("do.", '"', "do", "''"))
+        updates: dict[str, str] = {}
+
+        for field in ("occupation", "birthplace", "name", "relationship_to_head"):
+            val = getattr(self, field)
+            if val in DITTO_MARKS:
+                prev_val = getattr(previous_record, field)
+                if prev_val not in DITTO_MARKS:
+                    updates[field] = prev_val
+
+        if not updates:
+            return self
+        return self.model_copy(update=updates)

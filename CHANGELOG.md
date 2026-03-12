@@ -11,7 +11,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **GeometryEntry TypedDict**: `form_geometry.GeometryEntry` with keys `column`, `field`, `description` — fixes `Final[dict[int, str]]` typing
 - **Fail-fast path validation**: `transcribe_census_row` raises `FileNotFoundError` when `image_path` does not exist (pathlib.Path)
-- **resolve_ditto_marks placeholder**: `Census1880Record.resolve_ditto_marks(previous_record)` — stub for Knowledge Graph phase ditto resolution
+- **tests/test_server_logic.py**: Path failure test (FileNotFoundError for non-existent image), relative path acceptance test
+- **resolve_ditto_marks implementation**: Copies values from `previous_record` when occupation, birthplace, name, or relationship_to_head contains ditto marks ("do.", '"', "do", "''")
 - **Temporal HTR Server**: FastMCP server (`temporal-htr`) for 1880 U.S. Census handwritten transcription
 - **transcribe_census_row tool**: Capture Layer tool accepting `image_path` and `row_index`, using a 19th-century Paleographer persona, returning a mock `Census1880Record` with deterministic `handwriting_confidence`
 - **1880 Form Geometry**: Unified `CENSUS_1880_FORM_GEOMETRY` (single source of truth) and derived `CENSUS_1880_COLUMN_MAP` for Vision/HTR models
@@ -21,6 +22,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Absolute path resolution**: Relative `image_path` resolved against project root (via `src/` location); absolute paths unchanged
+- **resolve_ditto_marks**: Implemented (was placeholder); returns new record via `model_copy(update=...)`
+- **server.py cleanup**: Removed redundant `if __name__ == "__main__"` guard; entry point is `__main__.py`
 - **Geometry typing**: `CENSUS_1880_FORM_GEOMETRY` uses `list[GeometryEntry]`; renamed `label` to `description`
 - **Pydantic v2 idioms**: `Census1880Record.model_config` uses `ConfigDict` instead of plain dict
 - **__main__.py**: Simplified to `main()` + `if __name__ == "__main__": main()` pattern

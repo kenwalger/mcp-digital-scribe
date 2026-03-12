@@ -9,6 +9,9 @@ from mcp.server.fastmcp import FastMCP
 from digital_scribe.models.census_1880 import Census1880Record
 from digital_scribe.form_geometry import CENSUS_1880_FORM_GEOMETRY
 
+# Project root: parent of src/ (server.py lives in src/digital_scribe/)
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
 # System persona and HTR instructions for the transcription context
 PALEOGRAPHER_PERSONA = """You are a 19th-century Paleographer specializing in U.S. Census cursive.
 
@@ -62,6 +65,8 @@ def transcribe_census_row(image_path: str, row_index: int) -> dict:
         raise ValueError("row_index must be >= 0")
 
     path = Path(image_path)
+    if not path.is_absolute():
+        path = (_PROJECT_ROOT / image_path).resolve()
     if not path.exists():
         raise FileNotFoundError(f"Image not found: {image_path}")
 
@@ -99,7 +104,3 @@ def transcribe_census_row(image_path: str, row_index: int) -> dict:
         handwriting_confidence=confidence,
     )
     return record.model_dump()
-
-
-if __name__ == "__main__":
-    mcp.run(transport="stdio")

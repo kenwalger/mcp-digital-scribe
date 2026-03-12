@@ -97,17 +97,29 @@ def test_census_record_rejects_empty_strings() -> None:
         )
 
 
-def test_resolve_ditto_marks_placeholder() -> None:
-    """resolve_ditto_marks exists and returns self (placeholder for Knowledge Graph phase)."""
-    record = Census1880Record(
+def test_resolve_ditto_marks_with_previous() -> None:
+    """resolve_ditto_marks copies values from previous_record when ditto marks detected."""
+    previous = Census1880Record(
         dwelling_number=1,
         family_number=1,
         name="John Smith",
         relationship_to_head="Head",
         marital_status="Married",
-        occupation="do.",
+        occupation="Farmer",
         birthplace="New York",
         handwriting_confidence=0.9,
     )
-    result = record.resolve_ditto_marks(None)
-    assert result is record
+    record = Census1880Record(
+        dwelling_number=1,
+        family_number=1,
+        name="Mary",
+        relationship_to_head="Wife",
+        marital_status="Married",
+        occupation="do.",
+        birthplace='"',
+        handwriting_confidence=0.85,
+    )
+    resolved = record.resolve_ditto_marks(previous)
+    assert resolved.occupation == "Farmer"
+    assert resolved.birthplace == "New York"
+    assert resolved.name == "Mary"  # unchanged (not a ditto)
