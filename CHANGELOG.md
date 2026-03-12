@@ -12,6 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **_parse_historical_name**: Robust name parsing for Schema.org Person; handles "Surname, Given Name" and multi-word given names (e.g. "Mary Ann Jones")
 - **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
 - **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution
+- **DIGITAL_SCRIBE_ARCHIVE_PATH**: Environment variable to override archive path; used by memory_test to target data/test_archive.jsonld
 
 ### Changed
 
@@ -19,10 +20,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Directory creation**: data/ folder is created only in JSONLDStore.__init__ (when store is instantiated), not on every save
 - **Lazy store instantiation**: server.py creates JSONLDStore only when ingest_resident or cross_reference_resident is first called
 - **Deduplication fix**: search_by_surname_or_family no longer drops entities without @id; assigns urn:uuid:legacy-* fallback for legacy records; ingest enforces @id on all new entities
+- **Thread-safe singleton**: _get_knowledge_store() uses global threading.Lock and double-checked locking for true singleton
+- **search_by_surname_or_family**: Loads graph once and filters in-memory; ensures consistent fallback IDs for deduplication
+- **memory_test**: Uses data/test_archive.jsonld via DIGITAL_SCRIBE_ARCHIVE_PATH; no longer truncates production archive
 
 ### Fixed
 
 - **Silent corruption**: Atomic write pattern and lock prevent concurrent write collisions and partial writes
+- **Postcondition hardening**: Replaced bare assert with RuntimeError for @id validation; safe in optimized Python (-O)
+- **family_number validation**: cross_reference_resident now rejects family_number < 1 with a clear error message
 
 ---
 

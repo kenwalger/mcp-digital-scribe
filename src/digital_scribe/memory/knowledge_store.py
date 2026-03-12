@@ -132,7 +132,8 @@ class JSONLDStore:
                 )
         entity_id = f"urn:uuid:{uuid.uuid4()}"
         entity = _record_to_jsonld_entity(record, entity_id)
-        assert "@id" in entity and entity["@id"].startswith("urn:uuid:")
+        if "@id" not in entity or not entity["@id"].startswith("urn:uuid:"):
+            raise RuntimeError("Entity must have valid urn:uuid:@id before persistence")
         with self._lock:
             entities = self._load_graph()
             entities.append(entity)
@@ -165,16 +166,29 @@ class JSONLDStore:
         surname: str | None = None,
         family_number: int | None = None,
     ) -> list[dict]:
-        """Search by surname and/or family_number. Combines results (OR), deduplicated by @id."""
+        """Search by surname and/or family_number. Combines results (OR), deduplicated by @id.
+
+        Loads the graph once and filters in-memory for consistent fallback IDs.
+        """
         if not surname and family_number is None:
             return []
+        entities = self._load_graph()
+        candidates: list[dict] = []
+        surname_lower = (surname or "").strip().lower() if surname else ""
+        for e in entities:
+            match_surname = (
+                bool(surname_lower)
+                and (e.get("familyName") or "").lower() == surname_lower
+            )
+            match_family = (
+                family_number is not None
+                and family_number >= 1
+                and e.get("censusFamilyNumber") == family_number
+            )
+            if match_surname or match_family:
+                candidates.append(e)
         seen_ids: set[str] = set()
         results: list[dict] = []
-        candidates = []
-        if surname:
-            candidates.extend(self.search_by_surname(surname))
-        if family_number is not None and family_number >= 1:
-            candidates.extend(self.search_by_family_number(family_number))
         for i, e in enumerate(candidates):
             eid = e.get("@id")
             if not eid or not isinstance(eid, str):

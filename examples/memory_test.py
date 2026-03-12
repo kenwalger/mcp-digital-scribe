@@ -9,12 +9,14 @@ Demonstrates the Agentic Memory architecture (research/agentic_memory.md):
 Validation: Two consecutive rows with the same family_number; the second
 row successfully recalls the first from the Semantic Memory layer.
 
+Uses data/test_archive.jsonld (never production data/archive.jsonld).
 Run from project root:
     uv run python examples/memory_test.py
 """
 
 import asyncio
 import json
+import os
 import sys
 from pathlib import Path
 
@@ -26,6 +28,7 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 SALEM_IMAGE = "sample_data/1880_Salem_Page1.jpg"
+TEST_ARCHIVE = project_root / "data" / "test_archive.jsonld"
 # Rows 0 and 1 share family_number=1 in the mock; second can recall first
 ROW_INDICES = (0, 1)
 
@@ -47,16 +50,14 @@ def _extract_record_from_result(result) -> dict | None:
 
 async def main() -> None:
     """Memory-Aware Agent flow: Capture → Resolve → Ingest → Recall."""
+    env = os.environ.copy()
+    env["DIGITAL_SCRIBE_ARCHIVE_PATH"] = str(TEST_ARCHIVE)
     server_params = StdioServerParameters(
         command="uv",
         args=["run", "python", "-m", "digital_scribe"],
         cwd=project_root,
+        env=env,
     )
-
-    # Clear archive for reproducible test
-    archive_path = project_root / "data" / "archive.jsonld"
-    if archive_path.exists():
-        archive_path.write_text("[]")
 
     async with stdio_client(server_params) as (read_stream, write_stream):
         async with ClientSession(read_stream, write_stream) as session:
@@ -126,15 +127,15 @@ async def main() -> None:
                 sys.exit(1)
             print("\n✓ Memory lifecycle validated: Capture → Resolve → Ingest → Recall")
 
-            # Verify archive is valid JSON-LD for Schema Markup Validator
-            archive_text = archive_path.read_text(encoding="utf-8")
+            # Verify test archive is valid JSON-LD for Schema Markup Validator
+            archive_text = TEST_ARCHIVE.read_text(encoding="utf-8")
             parsed = json.loads(archive_text)
             assert isinstance(parsed, list) and len(parsed) >= 2
             for ent in parsed[:2]:
                 assert ent.get("@context") == "https://schema.org/"
                 assert ent.get("@type") == "Person"
                 assert ent.get("@id", "").startswith("urn:uuid:")
-            print("✓ data/archive.jsonld valid JSON-LD (Schema.org Person)")
+            print("✓ data/test_archive.jsonld valid JSON-LD (Schema.org Person)")
 
 
 if __name__ == "__main__":
