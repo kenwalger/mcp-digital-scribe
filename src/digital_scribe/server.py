@@ -11,6 +11,33 @@ from digital_scribe.form_geometry import CENSUS_1880_FORM_GEOMETRY
 
 # Project root: parent of src/ (server.py lives in src/digital_scribe/)
 _PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+_DATA_DIR = _PROJECT_ROOT / "sample_data"
+
+
+def _safe_resolve_path(image_path: str) -> Path:
+    """Resolve image_path strictly within the project's data directory.
+
+    Rejects absolute paths and paths (e.g. ../) that escape the data directory.
+    Raises PermissionError with 'Access Denied' for path traversal attempts.
+    """
+    path = Path(image_path)
+    if path.is_absolute():
+        raise PermissionError("Access Denied: absolute paths not allowed")
+
+    resolved = (_PROJECT_ROOT / image_path).resolve()
+    data_dir = _DATA_DIR.resolve()
+
+    try:
+        resolved.relative_to(data_dir)
+    except ValueError:
+        raise PermissionError(
+            "Access Denied: path must resolve within the project data directory"
+        )
+
+    if not resolved.exists():
+        raise FileNotFoundError(f"Image not found: {image_path}")
+    return resolved
+
 
 # System persona and HTR instructions for the transcription context
 PALEOGRAPHER_PERSONA = """You are a 19th-century Paleographer specializing in U.S. Census cursive.
@@ -64,11 +91,7 @@ def transcribe_census_row(image_path: str, row_index: int) -> dict:
     if row_index < 0:
         raise ValueError("row_index must be >= 0")
 
-    path = Path(image_path)
-    if not path.is_absolute():
-        path = (_PROJECT_ROOT / image_path).resolve()
-    if not path.exists():
-        raise FileNotFoundError(f"Image not found: {image_path}")
+    _safe_resolve_path(image_path)  # validates path and raises on violation
 
     # Mock implementation: deterministic confidence via adler32 for reproducibility
     confidence = _deterministic_confidence(image_path, row_index)

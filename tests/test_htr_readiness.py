@@ -74,14 +74,6 @@ def test_presidio_importable() -> None:
     assert AnalyzerEngine is not None
 
 
-def test_transcribe_rejects_negative_row_index() -> None:
-    """transcribe_census_row raises ValueError for row_index < 0."""
-    from digital_scribe.server import transcribe_census_row
-
-    with pytest.raises(ValueError, match="row_index must be >= 0"):
-        transcribe_census_row("sample_data/x.jpg", -1)
-
-
 def test_census_record_rejects_empty_strings() -> None:
     """String fields reject empty strings (min_length=1)."""
     with pytest.raises(ValueError):
@@ -114,7 +106,7 @@ def test_resolve_ditto_marks_with_previous() -> None:
         family_number=1,
         name="Mary",
         relationship_to_head="Wife",
-        marital_status="Married",
+        marital_status="do.",  # ditto — same as head
         occupation="do.",
         birthplace='"',
         handwriting_confidence=0.85,
@@ -122,4 +114,5 @@ def test_resolve_ditto_marks_with_previous() -> None:
     resolved = record.resolve_ditto_marks(previous)
     assert resolved.occupation == "Farmer"
     assert resolved.birthplace == "New York"
+    assert resolved.marital_status == "Married"
     assert resolved.name == "Mary"  # unchanged (not a ditto)

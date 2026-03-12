@@ -9,10 +9,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **_safe_resolve_path helper**: Validates image_path stays within project data directory; raises PermissionError("Access Denied") for absolute paths or path traversal (../)
 - **GeometryEntry TypedDict**: `form_geometry.GeometryEntry` with keys `column`, `field`, `description` — fixes `Final[dict[int, str]]` typing
 - **Fail-fast path validation**: `transcribe_census_row` raises `FileNotFoundError` when `image_path` does not exist (pathlib.Path)
 - **tests/test_server_logic.py**: Path failure test (FileNotFoundError for non-existent image), relative path acceptance test
-- **resolve_ditto_marks implementation**: Copies values from `previous_record` when occupation, birthplace, name, or relationship_to_head contains ditto marks ("do.", '"', "do", "''")
+- **resolve_ditto_marks implementation**: Copies values from `previous_record` when dittoable fields contain ditto marks; includes marital_status; DITTO_MARKS module-level constant
 - **Temporal HTR Server**: FastMCP server (`temporal-htr`) for 1880 U.S. Census handwritten transcription
 - **transcribe_census_row tool**: Capture Layer tool accepting `image_path` and `row_index`, using a 19th-century Paleographer persona, returning a mock `Census1880Record` with deterministic `handwriting_confidence`
 - **1880 Form Geometry**: Unified `CENSUS_1880_FORM_GEOMETRY` (single source of truth) and derived `CENSUS_1880_COLUMN_MAP` for Vision/HTR models
@@ -22,6 +23,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Secure path resolution**: `_safe_resolve_path` enforces paths within sample_data/; rejects ../ and absolute paths with Access Denied
+- **DITTO_MARKS**: Module-level frozenset with specific patterns ("do.", '"', '""', "''", "do" as standalone); marital_status added to resolve_ditto_marks
+- **Test reorganization**: test_transcribe_rejects_negative_row_index moved to test_server_logic.py
 - **Absolute path resolution**: Relative `image_path` resolved against project root (via `src/` location); absolute paths unchanged
 - **resolve_ditto_marks**: Implemented (was placeholder); returns new record via `model_copy(update=...)`
 - **server.py cleanup**: Removed redundant `if __name__ == "__main__"` guard; entry point is `__main__.py`

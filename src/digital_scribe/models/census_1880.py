@@ -4,6 +4,9 @@ from typing import Self
 
 from pydantic import BaseModel, ConfigDict, Field
 
+# Ditto marks: "do." (with period), quote symbols, standalone "do" (exact match only)
+DITTO_MARKS: frozenset[str] = frozenset(("do.", '"', '""', "''", "do"))
+
 
 class Census1880Record(BaseModel):
     """
@@ -66,19 +69,24 @@ class Census1880Record(BaseModel):
     )
 
     def resolve_ditto_marks(self, previous_record: "Census1880Record | None") -> Self:
-        """Logic for inheriting values from previous_record when "do." or '"' is detected.
+        """Logic for inheriting values from previous_record when ditto marks are detected.
 
-        When occupation, birthplace, name, or relationship_to_head contains a ditto
-        mark (e.g. "do.", '"', "do", "''"), copies the value from previous_record.
-        Returns a new record; does not mutate self.
+        When occupation, birthplace, name, relationship_to_head, or marital_status
+        contains a ditto mark (e.g. "do.", '"', "do" as standalone token), copies
+        the value from previous_record. Returns a new record; does not mutate self.
         """
         if previous_record is None:
             return self
 
-        DITTO_MARKS = frozenset(("do.", '"', "do", "''"))
         updates: dict[str, str] = {}
-
-        for field in ("occupation", "birthplace", "name", "relationship_to_head"):
+        dittoable_fields = (
+            "occupation",
+            "birthplace",
+            "name",
+            "relationship_to_head",
+            "marital_status",
+        )
+        for field in dittoable_fields:
             val = getattr(self, field)
             if val in DITTO_MARKS:
                 prev_val = getattr(previous_record, field)
