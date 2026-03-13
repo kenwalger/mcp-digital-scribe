@@ -9,6 +9,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **_parse_historical_name**: Robust name parsing for Schema.org Person; handles "Surname, Given Name" and multi-word given names (e.g. "Mary Ann Jones")
+- **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
+- **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution
+- **DIGITAL_SCRIBE_ARCHIVE_PATH**: Environment variable to override archive path; memory_test uses data/memory_test_run.jsonld (non-tracked)
+- **Deterministic fallback IDs**: Legacy entities without @id get urn:digital-scribe:legacy:{content_hash}; RFC-compliant for JSON-LD validation
+- **test_ingest_and_recall_success**: Positive-path test for ingest → recall flow
+- **Ingest deduplication**: Skip duplicate records; key: (givenName, familyName, censusDwellingNumber, censusFamilyNumber); prevents merging unrelated residents at same address
+- **Transparent ingest status**: ingest returns (entity_id, was_created); ingest_resident returns status "ingested" or "duplicate_skipped" with "id"
+- **ArchiveCorruptionError**: Custom RuntimeError for corrupt archive; distinguishes corruption (raise) from absence (return [])
+
+### Changed
+
+- **Thread-safe reads**: All search methods (search_by_surname, search_by_family_number, search_by_surname_or_family) hold self._lock during _load_graph; eliminates data-race with concurrent ingest
+- **Runtime path resolution**: DIGITAL_SCRIBE_ARCHIVE_PATH resolved inside JSONLDStore.__init__; respects env set after module import
+- **memory_test hardening**: Replaced bare asserts in validation block with explicit RuntimeError checks
+- **conftest**: Uses monkeypatch.setenv for DIGITAL_SCRIBE_ARCHIVE_PATH (archive resolution moved to store)
+- **Name parsing**: Replaced _split_name with _parse_historical_name for correct familyName/givenName mapping
+- **Directory creation**: data/ folder is created only in JSONLDStore.__init__ (when store is instantiated), not on every save
+- **Lazy store instantiation**: server.py creates JSONLDStore only when ingest_resident or cross_reference_resident is first called
+- **Deduplication fix**: search_by_surname_or_family no longer drops entities without @id; assigns urn:digital-scribe:legacy:* fallback for legacy records; ingest enforces @id on all new entities
+- **Thread-safe singleton**: _get_knowledge_store() uses global threading.Lock and double-checked locking for true singleton
+- **_content_hash**: Hoisted to module-level helper in knowledge_store.py
+- **_save_graph**: Trailing newline + f.flush() + os.fsync() before os.replace; replaced flag for tmp cleanup
+- **_parse_historical_name**: Strip trailing/leading commas from comma-split parts; exclude empty givenName from JSON-LD
+- **Schema symmetry**: Exclude empty givenName from JSON-LD output; single-token names no longer emit empty string for givenName
+- **memory_test**: Handles status "error" for both ingest and recall; data/test_archive.jsonld trailing newline added
+- **PEP 8**: logger = logging.getLogger(__name__) moved after all imports in knowledge_store.py
+- **_record_to_jsonld_entity docstring**: name parsing described as familyName (last token) and givenName (all preceding tokens)
+
+### Fixed
+
+- **Silent corruption**: Atomic write pattern and lock prevent concurrent write collisions and partial writes
+- **Postcondition hardening**: Replaced bare assert with RuntimeError for @id validation; safe in optimized Python (-O)
+- **family_number validation**: cross_reference_resident now rejects family_number < 1 with a clear error message
+- **Dead code**: Removed unreachable len(parts)==1 branch in _parse_historical_name comma-handling
+- **Atomic write robustness**: _save_graph uses replaced flag; tmp unlink only when replace failed
+- **cross_reference_resident**: Guard uses explicit surname is None and family_number is None checks
+- **Robust legacy dedup**: Ingest loop generates fallback ID via _content_hash when match lacks @id; ensures was_created=False skip always triggers
+- **Corruption vs absence**: _load_graph: missing file → []; JSONDecodeError → raise ArchiveCorruptionError (prevents data loss from overwriting with [])
+- **ingest_resident**: Catches ArchiveCorruptionError; returns status "error" with CRITICAL message; ingestion halted
+- **cross_reference_resident**: Catches ArchiveCorruptionError; returns status "error" with CRITICAL message; recall halted (consistent with ingest_resident)
+
+---
+
+### Added (prior)
+
+- **JSONLDStore** (`memory/knowledge_store.py`): Semantic Memory layer; ingests Census1880Record, transforms to Schema.org Person JSON-LD (Schema.org-aligned), persists to `data/archive.jsonld`; search by familyName or censusFamilyNumber
+- **ingest_resident tool**: MCP tool to ingest a census record into the Knowledge Archive (Persistence)
+- **cross_reference_resident tool**: MCP tool to search the archive by surname and/or family_number (Recall / Semantic Memory)
+- **examples/memory_test.py**: Memory-Aware Agent flow — Capture → Resolve → Ingest → Recall; validates two consecutive rows with same family_number can recall each other
 - **RecursiveDittoError**: Raised when previous_record also has a ditto in a field; forces chronological resolution
 - **DITTOABLE_FIELDS**: Module-level tuple for canonical dittoable field list
 - **_safe_resolve_path helper**: Validates image_path stays within project data directory; raises PermissionError("Access Denied") for absolute paths or path traversal (../)
@@ -25,6 +75,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Schema.org alignment**: JSON-LD now uses givenName/familyName (split by first space), hasOccupation (nested Occupation), birthPlace (nested Place); @context "https://schema.org/"
+- **Unique identifiers**: @id uses urn:uuid for every entity
+- **Semantic recall**: cross_reference_resident queries familyName (Schema.org) and censusFamilyNumber
+- **Knowledge Stewardship**: ingest_resident rejects records with unresolved ditto marks; forces resolve_ditto_marks before persistence
+- **Memory lifecycle**: Orchestrator (memory_test) follows agentic_memory.md: Capture (transcribe) → Resolve (ditto) → Ingest (JSONLDStore) → Recall (cross_reference_resident)
 - **Chained ditto resolution**: resolve_ditto_marks raises RecursiveDittoError when previous_record has ditto in same field
 - **salem_test consistency**: Uses DITTO_MARKS and DITTOABLE_FIELDS from model; marital_status in detection loop
 - **transcribe_census_row**: Return type -> dict[str, Any] for static analysis
