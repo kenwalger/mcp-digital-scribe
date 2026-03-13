@@ -174,7 +174,7 @@ def cross_reference_resident(
     residents from previous pages or census years. Provide at least one of
     surname or family_number.
     """
-    if not (surname or family_number is not None):
+    if surname is None and family_number is None:
         raise ValueError("Provide surname and/or family_number")
     if family_number is not None and family_number < 1:
         raise ValueError("family_number must be >= 1")

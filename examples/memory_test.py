@@ -145,9 +145,11 @@ async def main() -> None:
                         f"Entity missing @type Person: {ent.get('@type')!r}"
                     )
                 eid = ent.get("@id", "")
-                if eid and not eid.startswith("urn:uuid:"):
+                if eid and not (
+                    eid.startswith("urn:uuid:") or eid.startswith("urn:digital-scribe:legacy:")
+                ):
                     raise RuntimeError(
-                        f"Entity @id must be urn:uuid: if present: got {eid!r}"
+                        f"Entity @id must be urn:uuid: or urn:digital-scribe:legacy: if present: got {eid!r}"
                     )
             print("✓ data/memory_test_run.jsonld valid JSON-LD (Schema.org Person)")
 

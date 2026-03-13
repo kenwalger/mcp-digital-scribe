@@ -17,6 +17,8 @@ from digital_scribe.models.census_1880 import Census1880Record, DITTO_MARKS, DIT
 
 logger = logging.getLogger(__name__)
 
+LEGACY_ID_PREFIX = "urn:digital-scribe:legacy:"
+
 
 def _content_hash(entity: dict) -> str:
     """Deterministic content hash for legacy entity IDs (usedforsecurity=False for FIPS)."""
@@ -59,7 +61,7 @@ def _record_to_jsonld_entity(record: Census1880Record, entity_id: str | None = N
     """Transform a Census1880Record into a Schema.org Person JSON-LD entity.
 
     Mapping:
-    - name → givenName + familyName (split by first space)
+    - name → parsed into familyName (last token) and givenName (all preceding tokens)
     - occupation → hasOccupation (nested Occupation with name)
     - birthplace → birthPlace (nested Place with name)
     """
@@ -123,8 +125,11 @@ class JSONLDStore:
         text = self._path.read_text(encoding="utf-8")
         if not text.strip():
             return []
-        # Support both JSON array and JSON-LD graph (single object with @graph)
-        data = json.loads(text)
+        try:
+            data = json.loads(text)
+        except (json.JSONDecodeError, ValueError) as e:
+            logger.critical("Corrupt archive: %s (%s)", self._path, e)
+            return []
         if isinstance(data, list):
             return data
         if isinstance(data, dict) and "@graph" in data:
@@ -172,7 +177,7 @@ class JSONLDStore:
                 ):
                     existing_id = e.get("@id")
                     if not existing_id or not isinstance(existing_id, str):
-                        existing_id = f"urn:uuid:legacy-{_content_hash(e)}"
+                        existing_id = f"{LEGACY_ID_PREFIX}{_content_hash(e)}"
                     logger.info(
                         "Record already exists, skipping ingest: %s %s (dwelling %s, family %s)",
                         given or "?",
@@ -247,7 +252,7 @@ class JSONLDStore:
             for e in candidates:
                 eid = e.get("@id")
                 if not eid or not isinstance(eid, str):
-                    eid = f"urn:uuid:legacy-{_content_hash(e)}"
+                    eid = f"{LEGACY_ID_PREFIX}{_content_hash(e)}"
                     e = {**e, "@id": eid}
                 if eid not in seen_ids:
                     seen_ids.add(eid)

@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
 - **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution
 - **DIGITAL_SCRIBE_ARCHIVE_PATH**: Environment variable to override archive path; memory_test uses data/memory_test_run.jsonld (non-tracked)
-- **Deterministic fallback IDs**: Legacy entities without @id get urn:uuid:legacy-{content_hash}; content-derived only (no index); usedforsecurity=False for FIPS; true stability across process restarts and archive growth
+- **Deterministic fallback IDs**: Legacy entities without @id get urn:digital-scribe:legacy:{content_hash}; RFC-compliant for JSON-LD validation
 - **test_ingest_and_recall_success**: Positive-path test for ingest → recall flow
 - **Ingest deduplication**: Skip duplicate records; key: (givenName, familyName, censusDwellingNumber, censusFamilyNumber); prevents merging unrelated residents at same address
 - **Transparent ingest status**: ingest returns (entity_id, was_created); ingest_resident returns status "ingested" or "duplicate_skipped" with "id"
@@ -27,14 +27,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Name parsing**: Replaced _split_name with _parse_historical_name for correct familyName/givenName mapping
 - **Directory creation**: data/ folder is created only in JSONLDStore.__init__ (when store is instantiated), not on every save
 - **Lazy store instantiation**: server.py creates JSONLDStore only when ingest_resident or cross_reference_resident is first called
-- **Deduplication fix**: search_by_surname_or_family no longer drops entities without @id; assigns urn:uuid:legacy-* fallback for legacy records; ingest enforces @id on all new entities
+- **Deduplication fix**: search_by_surname_or_family no longer drops entities without @id; assigns urn:digital-scribe:legacy:* fallback for legacy records; ingest enforces @id on all new entities
 - **Thread-safe singleton**: _get_knowledge_store() uses global threading.Lock and double-checked locking for true singleton
 - **_content_hash**: Hoisted to module-level helper in knowledge_store.py
 - **_save_graph**: Trailing newline + f.flush() + os.fsync() before os.replace; replaced flag for tmp cleanup
 - **_parse_historical_name**: Strip trailing/leading commas from comma-split parts; exclude empty givenName from JSON-LD
 - **Schema symmetry**: Exclude empty givenName from JSON-LD output; single-token names no longer emit empty string for givenName
-- **memory_test**: Uses data/memory_test_run.jsonld; validation allows legacy entities without @id
+- **memory_test**: Uses data/memory_test_run.jsonld; validation accepts urn:uuid: and urn:digital-scribe:legacy: for @id
 - **PEP 8**: logger = logging.getLogger(__name__) moved after all imports in knowledge_store.py
+- **_record_to_jsonld_entity docstring**: name parsing described as familyName (last token) and givenName (all preceding tokens)
 
 ### Fixed
 
@@ -43,7 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **family_number validation**: cross_reference_resident now rejects family_number < 1 with a clear error message
 - **Dead code**: Removed unreachable len(parts)==1 branch in _parse_historical_name comma-handling
 - **Atomic write robustness**: _save_graph uses replaced flag; tmp unlink only when replace failed
+- **cross_reference_resident**: Guard uses explicit surname is None and family_number is None checks
 - **Robust legacy dedup**: Ingest loop generates fallback ID via _content_hash when match lacks @id; ensures was_created=False skip always triggers
+- **Corrupt archive resilience**: _load_graph try/except (JSONDecodeError, ValueError); on error log CRITICAL and return []
 
 ---
 
