@@ -13,9 +13,9 @@ import threading
 import uuid
 from pathlib import Path
 
-logger = logging.getLogger(__name__)
-
 from digital_scribe.models.census_1880 import Census1880Record, DITTO_MARKS, DITTOABLE_FIELDS
+
+logger = logging.getLogger(__name__)
 
 
 def _content_hash(entity: dict) -> str:
@@ -138,6 +138,7 @@ class JSONLDStore:
         try:
             with open(tmp_path, "w", encoding="utf-8") as f:
                 json.dump(entities, f, indent=2, ensure_ascii=False)
+                f.write("\n")
                 f.flush()
                 os.fsync(f.fileno())
             os.replace(tmp_path, self._path)
@@ -169,16 +170,17 @@ class JSONLDStore:
                     and e.get("censusDwellingNumber") == record.dwelling_number
                     and e.get("censusFamilyNumber") == record.family_number
                 ):
-                    existing_id = e.get("@id", "")
-                    if existing_id:
-                        logger.info(
-                            "Record already exists, skipping ingest: %s %s (dwelling %s, family %s)",
-                            given or "?",
-                            family or "?",
-                            record.dwelling_number,
-                            record.family_number,
-                        )
-                        return (existing_id, False)
+                    existing_id = e.get("@id")
+                    if not existing_id or not isinstance(existing_id, str):
+                        existing_id = f"urn:uuid:legacy-{_content_hash(e)}"
+                    logger.info(
+                        "Record already exists, skipping ingest: %s %s (dwelling %s, family %s)",
+                        given or "?",
+                        family or "?",
+                        record.dwelling_number,
+                        record.family_number,
+                    )
+                    return (existing_id, False)
             entity_id = f"urn:uuid:{uuid.uuid4()}"
             entity = _record_to_jsonld_entity(record, entity_id)
             if "@id" not in entity or not entity["@id"].startswith("urn:uuid:"):
