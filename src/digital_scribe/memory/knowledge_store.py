@@ -7,10 +7,13 @@ interoperability. Enables cross-referencing by familyName or censusFamilyNumber.
 
 import hashlib
 import json
+import logging
 import os
 import threading
 import uuid
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from digital_scribe.models.census_1880 import Census1880Record, DITTO_MARKS, DITTOABLE_FIELDS
 
@@ -29,9 +32,11 @@ def _parse_historical_name(full_name: str) -> tuple[str, str]:
 
     # "Surname, Given Name" format
     if "," in s:
-        parts = [p.strip() for p in s.split(",", 1)]
-        if len(parts) == 2 and parts[0] and parts[1]:
-            return (parts[1], parts[0])  # givenName, familyName
+        parts = [p.strip().strip(",").strip() for p in s.split(",", 1)]
+        if len(parts) == 2:
+            given, family = parts[1], parts[0]
+            if given or family:
+                return (given, family)  # givenName, familyName (may be empty)
 
     # Default: "Given Name(s) Surname" — last token is familyName
     tokens = s.split()
@@ -121,14 +126,16 @@ class JSONLDStore:
     def _save_graph(self, entities: list[dict]) -> None:
         """Persist entities using write-to-temp + os.replace for atomic writes."""
         tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
+        replaced = False
         try:
             tmp_path.write_text(
                 json.dumps(entities, indent=2, ensure_ascii=False),
                 encoding="utf-8",
             )
             os.replace(tmp_path, self._path)
+            replaced = True
         finally:
-            if tmp_path.exists():
+            if not replaced and tmp_path.exists():
                 tmp_path.unlink()
 
     def ingest(self, record: Census1880Record) -> str:
@@ -145,12 +152,30 @@ class JSONLDStore:
                     f"Knowledge Stewardship: resolve ditto marks before ingest. "
                     f"Field '{field}' contains raw ditto {val!r}."
                 )
-        entity_id = f"urn:uuid:{uuid.uuid4()}"
-        entity = _record_to_jsonld_entity(record, entity_id)
-        if "@id" not in entity or not entity["@id"].startswith("urn:uuid:"):
-            raise RuntimeError("Entity must have valid urn:uuid:@id before persistence")
+        given, family = _parse_historical_name(record.name)
         with self._lock:
             entities = self._load_graph()
+            for e in entities:
+                if (
+                    (e.get("givenName") or "") == given
+                    and (e.get("familyName") or "") == family
+                    and e.get("censusDwellingNumber") == record.dwelling_number
+                ):
+                    existing_id = e.get("@id", "")
+                    if existing_id:
+                        logger.info(
+                            "Record already exists, skipping ingest: %s %s (dwelling %s)",
+                            given or "?",
+                            family or "?",
+                            record.dwelling_number,
+                        )
+                        return existing_id
+            entity_id = f"urn:uuid:{uuid.uuid4()}"
+            entity = _record_to_jsonld_entity(record, entity_id)
+            if "@id" not in entity or not entity["@id"].startswith("urn:uuid:"):
+                raise RuntimeError(
+                    "Entity must have valid urn:uuid:@id before persistence"
+                )
             entities.append(entity)
             self._save_graph(entities)
         return entity_id

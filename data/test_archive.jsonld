@@ -2,7 +2,7 @@
   {
     "@context": "https://schema.org/",
     "@type": "Person",
-    "@id": "urn:uuid:5716f192-2372-4e35-8e2a-cf87ebccb151",
+    "@id": "urn:uuid:26fcb192-f2d1-469f-91e5-8814b75a3290",
     "givenName": "John",
     "familyName": "Smith",
     "hasOccupation": {
@@ -21,83 +21,7 @@
   {
     "@context": "https://schema.org/",
     "@type": "Person",
-    "@id": "urn:uuid:664d146b-241c-4d61-b1a1-6bb8f52df8e9",
-    "givenName": "Mary",
-    "familyName": "Johnson",
-    "hasOccupation": {
-      "@type": "Occupation",
-      "name": "Keeping House"
-    },
-    "birthPlace": {
-      "@type": "Place",
-      "name": "Pennsylvania"
-    },
-    "censusFamilyNumber": 1,
-    "censusDwellingNumber": 1,
-    "censusRelationshipToHead": "Wife",
-    "censusMaritalStatus": "Single"
-  },
-  {
-    "@context": "https://schema.org/",
-    "@type": "Person",
-    "@id": "urn:uuid:a615970d-e9b9-4835-932a-20749cd3db1c",
-    "givenName": "John",
-    "familyName": "Smith",
-    "hasOccupation": {
-      "@type": "Occupation",
-      "name": "Farmer"
-    },
-    "birthPlace": {
-      "@type": "Place",
-      "name": "New York"
-    },
-    "censusFamilyNumber": 1,
-    "censusDwellingNumber": 1,
-    "censusRelationshipToHead": "Head",
-    "censusMaritalStatus": "Married"
-  },
-  {
-    "@context": "https://schema.org/",
-    "@type": "Person",
-    "@id": "urn:uuid:a80a6085-717b-4356-9a23-cfe94e7075f2",
-    "givenName": "Mary",
-    "familyName": "Johnson",
-    "hasOccupation": {
-      "@type": "Occupation",
-      "name": "Keeping House"
-    },
-    "birthPlace": {
-      "@type": "Place",
-      "name": "Pennsylvania"
-    },
-    "censusFamilyNumber": 1,
-    "censusDwellingNumber": 1,
-    "censusRelationshipToHead": "Wife",
-    "censusMaritalStatus": "Single"
-  },
-  {
-    "@context": "https://schema.org/",
-    "@type": "Person",
-    "@id": "urn:uuid:4802bda0-f0d7-47d4-8df3-b4bb3f0f3a7c",
-    "givenName": "John",
-    "familyName": "Smith",
-    "hasOccupation": {
-      "@type": "Occupation",
-      "name": "Farmer"
-    },
-    "birthPlace": {
-      "@type": "Place",
-      "name": "New York"
-    },
-    "censusFamilyNumber": 1,
-    "censusDwellingNumber": 1,
-    "censusRelationshipToHead": "Head",
-    "censusMaritalStatus": "Married"
-  },
-  {
-    "@context": "https://schema.org/",
-    "@type": "Person",
-    "@id": "urn:uuid:8b774fcc-d950-4901-949c-a36d1dc40c83",
+    "@id": "urn:uuid:460b3141-6e6d-4468-bf5d-24208ffe75a0",
     "givenName": "Mary",
     "familyName": "Johnson",
     "hasOccupation": {
