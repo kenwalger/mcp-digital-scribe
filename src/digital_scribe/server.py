@@ -9,7 +9,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from digital_scribe.form_geometry import CENSUS_1880_FORM_GEOMETRY
-from digital_scribe.memory.knowledge_store import JSONLDStore
+from digital_scribe.memory.knowledge_store import ArchiveCorruptionError, JSONLDStore
 from digital_scribe.models.census_1880 import Census1880Record
 
 # Project root: parent of src/ (server.py lives in src/digital_scribe/)
@@ -157,7 +157,13 @@ def ingest_resident(record: dict[str, Any]) -> dict[str, Any]:
     so it can be recalled by cross_reference_resident.
     """
     parsed = Census1880Record.model_validate(record)
-    entity_id, was_created = _get_knowledge_store().ingest(parsed)
+    try:
+        entity_id, was_created = _get_knowledge_store().ingest(parsed)
+    except ArchiveCorruptionError:
+        return {
+            "status": "error",
+            "message": "CRITICAL: The knowledge archive is corrupt. Ingestion halted to prevent data loss.",
+        }
     if was_created:
         return {"status": "ingested", "id": entity_id}
     return {"status": "duplicate_skipped", "id": entity_id}

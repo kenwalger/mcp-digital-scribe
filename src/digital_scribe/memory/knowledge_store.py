@@ -20,6 +20,14 @@ logger = logging.getLogger(__name__)
 LEGACY_ID_PREFIX = "urn:digital-scribe:legacy:"
 
 
+class ArchiveCorruptionError(RuntimeError):
+    """Raised when the knowledge archive file exists but is corrupt (invalid JSON).
+
+    Distinguishes corruption from absence: missing file returns []; corrupt
+    file raises to prevent _save_graph from overwriting with empty list.
+    """
+
+
 def _content_hash(entity: dict) -> str:
     """Deterministic content hash for legacy entity IDs (usedforsecurity=False for FIPS)."""
     return hashlib.md5(
@@ -119,7 +127,10 @@ class JSONLDStore:
         self._lock = threading.Lock()
 
     def _load_graph(self) -> list[dict]:
-        """Load existing entities from the archive file."""
+        """Load existing entities from the archive file.
+
+        Missing file → []. Corrupt JSON → raises ArchiveCorruptionError.
+        """
         if not self._path.exists():
             return []
         text = self._path.read_text(encoding="utf-8")
@@ -127,9 +138,11 @@ class JSONLDStore:
             return []
         try:
             data = json.loads(text)
-        except (json.JSONDecodeError, ValueError) as e:
+        except json.JSONDecodeError as e:
             logger.critical("Corrupt archive: %s (%s)", self._path, e)
-            return []
+            raise ArchiveCorruptionError(
+                f"Knowledge archive is corrupt: {self._path} ({e})"
+            ) from e
         if isinstance(data, list):
             return data
         if isinstance(data, dict) and "@graph" in data:

@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **test_ingest_and_recall_success**: Positive-path test for ingest → recall flow
 - **Ingest deduplication**: Skip duplicate records; key: (givenName, familyName, censusDwellingNumber, censusFamilyNumber); prevents merging unrelated residents at same address
 - **Transparent ingest status**: ingest returns (entity_id, was_created); ingest_resident returns status "ingested" or "duplicate_skipped" with "id"
+- **ArchiveCorruptionError**: Custom RuntimeError for corrupt archive; distinguishes corruption (raise) from absence (return [])
 
 ### Changed
 
@@ -33,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **_save_graph**: Trailing newline + f.flush() + os.fsync() before os.replace; replaced flag for tmp cleanup
 - **_parse_historical_name**: Strip trailing/leading commas from comma-split parts; exclude empty givenName from JSON-LD
 - **Schema symmetry**: Exclude empty givenName from JSON-LD output; single-token names no longer emit empty string for givenName
-- **memory_test**: Uses data/memory_test_run.jsonld; validation accepts urn:uuid: and urn:digital-scribe:legacy: for @id
+- **memory_test**: Uses data/memory_test_run.jsonld; handles status "error" (archive corrupt) with exit 1
 - **PEP 8**: logger = logging.getLogger(__name__) moved after all imports in knowledge_store.py
 - **_record_to_jsonld_entity docstring**: name parsing described as familyName (last token) and givenName (all preceding tokens)
 
@@ -46,7 +47,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Atomic write robustness**: _save_graph uses replaced flag; tmp unlink only when replace failed
 - **cross_reference_resident**: Guard uses explicit surname is None and family_number is None checks
 - **Robust legacy dedup**: Ingest loop generates fallback ID via _content_hash when match lacks @id; ensures was_created=False skip always triggers
-- **Corrupt archive resilience**: _load_graph try/except (JSONDecodeError, ValueError); on error log CRITICAL and return []
+- **Corruption vs absence**: _load_graph: missing file → []; JSONDecodeError → raise ArchiveCorruptionError (prevents data loss from overwriting with [])
+- **ingest_resident**: Catches ArchiveCorruptionError; returns status "error" with CRITICAL message; ingestion halted
 
 ---
 

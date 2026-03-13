@@ -95,8 +95,12 @@ async def main() -> None:
                 ingest_result = _extract_record_from_result(ingest)
                 if not ingest_result:
                     ingest_result = {}
-                entity_id = ingest_result.get("id", ingest_result.get("@id", "?"))
                 status = ingest_result.get("status", "?")
+                if status == "error":
+                    msg = ingest_result.get("message", "Unknown error")
+                    print(f"\n{msg}", file=sys.stderr)
+                    sys.exit(1)
+                entity_id = ingest_result.get("id", ingest_result.get("@id", "?"))
                 print(f"Row {row_idx}: {resolved.name} (family {resolved.family_number}) → [{status}] {entity_id}")
 
             # 4. Recall (Semantic Memory)
