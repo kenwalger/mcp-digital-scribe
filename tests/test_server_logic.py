@@ -67,7 +67,7 @@ def test_ingest_and_recall_success() -> None:
     }
     ingest_result = ingest_resident(record)
     assert ingest_result.get("status") == "ingested"
-    assert ingest_result.get("@id", "").startswith("urn:uuid:")
+    assert ingest_result.get("id", "").startswith("urn:uuid:")
 
     recall_result = cross_reference_resident(surname="Person")
     assert recall_result.get("count", 0) >= 1

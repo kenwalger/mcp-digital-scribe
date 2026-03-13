@@ -20,6 +20,7 @@ htmlcov/
 
 # Knowledge archive (ephemeral for tests)
 data/archive.jsonld
+data/memory_test_run.jsonld
 
 # Environment
 .env

@@ -12,10 +12,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **_parse_historical_name**: Robust name parsing for Schema.org Person; handles "Surname, Given Name" and multi-word given names (e.g. "Mary Ann Jones")
 - **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
 - **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution
-- **DIGITAL_SCRIBE_ARCHIVE_PATH**: Environment variable to override archive path; used by memory_test to target data/test_archive.jsonld
+- **DIGITAL_SCRIBE_ARCHIVE_PATH**: Environment variable to override archive path; memory_test uses data/memory_test_run.jsonld (non-tracked)
 - **Deterministic fallback IDs**: Legacy entities without @id get urn:uuid:legacy-{content_hash}; content-derived only (no index); usedforsecurity=False for FIPS; true stability across process restarts and archive growth
 - **test_ingest_and_recall_success**: Positive-path test for ingest → recall flow
-- **Ingest deduplication**: Skip duplicate records (same givenName, familyName, dwelling_number); return existing @id and log
+- **Ingest deduplication**: Skip duplicate records; key: (givenName, familyName, censusDwellingNumber, censusFamilyNumber); prevents merging unrelated residents at same address
+- **Transparent ingest status**: ingest returns (entity_id, was_created); ingest_resident returns status "ingested" or "duplicate_skipped" with "id"
 
 ### Changed
 
@@ -28,11 +29,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Lazy store instantiation**: server.py creates JSONLDStore only when ingest_resident or cross_reference_resident is first called
 - **Deduplication fix**: search_by_surname_or_family no longer drops entities without @id; assigns urn:uuid:legacy-* fallback for legacy records; ingest enforces @id on all new entities
 - **Thread-safe singleton**: _get_knowledge_store() uses global threading.Lock and double-checked locking for true singleton
-- **search_by_surname_or_family**: Loads graph once and filters in-memory; content-hash for legacy IDs (no enumerate); ensures consistent fallback IDs for deduplication
-- **_save_graph**: replaced flag; unlink tmp only if os.replace never completed
+- **_content_hash**: Hoisted to module-level helper in knowledge_store.py
+- **_save_graph**: f.flush() + os.fsync() before os.replace for durability; replaced flag for tmp cleanup
 - **_parse_historical_name**: Strip trailing/leading commas from comma-split parts; exclude empty givenName from JSON-LD
 - **Schema symmetry**: Exclude empty givenName from JSON-LD output; single-token names no longer emit empty string for givenName
-- **memory_test**: Uses data/test_archive.jsonld via DIGITAL_SCRIBE_ARCHIVE_PATH; no longer truncates production archive
+- **memory_test**: Uses data/memory_test_run.jsonld (fresh, non-tracked); prints ingest status (ingested vs duplicate_skipped)
 
 ### Fixed
 

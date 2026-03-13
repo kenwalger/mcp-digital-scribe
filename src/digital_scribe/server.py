@@ -157,8 +157,10 @@ def ingest_resident(record: dict[str, Any]) -> dict[str, Any]:
     so it can be recalled by cross_reference_resident.
     """
     parsed = Census1880Record.model_validate(record)
-    entity_id = _get_knowledge_store().ingest(parsed)
-    return {"status": "ingested", "@id": entity_id}
+    entity_id, was_created = _get_knowledge_store().ingest(parsed)
+    if was_created:
+        return {"status": "ingested", "id": entity_id}
+    return {"status": "duplicate_skipped", "id": entity_id}
 
 
 @mcp.tool()

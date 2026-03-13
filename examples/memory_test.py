@@ -9,7 +9,7 @@ Demonstrates the Agentic Memory architecture (research/agentic_memory.md):
 Validation: Two consecutive rows with the same family_number; the second
 row successfully recalls the first from the Semantic Memory layer.
 
-Uses data/test_archive.jsonld (never production data/archive.jsonld).
+Uses data/memory_test_run.jsonld (fresh, non-tracked; never production archive).
 Run from project root:
     uv run python examples/memory_test.py
 """
@@ -28,7 +28,7 @@ from mcp.client.session import ClientSession
 from mcp.client.stdio import StdioServerParameters, stdio_client
 
 SALEM_IMAGE = "sample_data/1880_Salem_Page1.jpg"
-TEST_ARCHIVE = project_root / "data" / "test_archive.jsonld"
+TEST_ARCHIVE = project_root / "data" / "memory_test_run.jsonld"
 # Rows 0 and 1 share family_number=1 in the mock; second can recall first
 ROW_INDICES = (0, 1)
 
@@ -95,8 +95,9 @@ async def main() -> None:
                 ingest_result = _extract_record_from_result(ingest)
                 if not ingest_result:
                     ingest_result = {}
-                entity_id = ingest_result.get("@id", "?")
-                print(f"Row {row_idx}: {resolved.name} (family {resolved.family_number}) → {entity_id}")
+                entity_id = ingest_result.get("id", ingest_result.get("@id", "?"))
+                status = ingest_result.get("status", "?")
+                print(f"Row {row_idx}: {resolved.name} (family {resolved.family_number}) → [{status}] {entity_id}")
 
             # 4. Recall (Semantic Memory)
             family_num = 1  # Both rows 0 and 1 have family_number=1 in mock
@@ -148,7 +149,7 @@ async def main() -> None:
                     raise RuntimeError(
                         f"Entity must have urn:uuid:@id: got {eid!r}"
                     )
-            print("✓ data/test_archive.jsonld valid JSON-LD (Schema.org Person)")
+            print("✓ data/memory_test_run.jsonld valid JSON-LD (Schema.org Person)")
 
 
 if __name__ == "__main__":

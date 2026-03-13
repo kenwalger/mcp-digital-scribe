@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 from digital_scribe.models.census_1880 import Census1880Record, DITTO_MARKS, DITTOABLE_FIELDS
 
 
+def _content_hash(entity: dict) -> str:
+    """Deterministic content hash for legacy entity IDs (usedforsecurity=False for FIPS)."""
+    return hashlib.md5(
+        json.dumps(entity, sort_keys=True).encode(),
+        usedforsecurity=False,
+    ).hexdigest()
+
+
 def _parse_historical_name(full_name: str) -> tuple[str, str]:
     """Parse historical census name into givenName and familyName (Schema.org Person).
 
@@ -124,26 +132,25 @@ class JSONLDStore:
         return [data] if isinstance(data, dict) else []
 
     def _save_graph(self, entities: list[dict]) -> None:
-        """Persist entities using write-to-temp + os.replace for atomic writes."""
+        """Persist entities using write-to-temp + fsync + os.replace for atomic writes."""
         tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
         replaced = False
         try:
-            tmp_path.write_text(
-                json.dumps(entities, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(entities, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
             os.replace(tmp_path, self._path)
             replaced = True
         finally:
             if not replaced and tmp_path.exists():
                 tmp_path.unlink()
 
-    def ingest(self, record: Census1880Record) -> str:
-        """Ingest a Census1880Record, transform to JSON-LD, append to archive. Returns entity @id.
+    def ingest(self, record: Census1880Record) -> tuple[str, bool]:
+        """Ingest a Census1880Record, transform to JSON-LD, append to archive.
 
-        Knowledge Stewardship: Rejects records with unresolved ditto marks.
-        Call resolve_ditto_marks(previous_record) before ingest.
-        Atomic: uses Lock + write-to-temp + os.replace to prevent corruption.
+        Returns (entity_id, was_created). was_created is False if duplicate skipped.
+        Dedup key: (givenName, familyName, censusDwellingNumber, censusFamilyNumber).
         """
         for field in DITTOABLE_FIELDS:
             val = getattr(record, field)
@@ -160,16 +167,18 @@ class JSONLDStore:
                     (e.get("givenName") or "") == given
                     and (e.get("familyName") or "") == family
                     and e.get("censusDwellingNumber") == record.dwelling_number
+                    and e.get("censusFamilyNumber") == record.family_number
                 ):
                     existing_id = e.get("@id", "")
                     if existing_id:
                         logger.info(
-                            "Record already exists, skipping ingest: %s %s (dwelling %s)",
+                            "Record already exists, skipping ingest: %s %s (dwelling %s, family %s)",
                             given or "?",
                             family or "?",
                             record.dwelling_number,
+                            record.family_number,
                         )
-                        return existing_id
+                        return (existing_id, False)
             entity_id = f"urn:uuid:{uuid.uuid4()}"
             entity = _record_to_jsonld_entity(record, entity_id)
             if "@id" not in entity or not entity["@id"].startswith("urn:uuid:"):
@@ -178,7 +187,7 @@ class JSONLDStore:
                 )
             entities.append(entity)
             self._save_graph(entities)
-        return entity_id
+        return (entity_id, True)
 
     def search_by_surname(self, surname: str) -> list[dict]:
         """Return entities with matching familyName (Schema.org property)."""
@@ -215,12 +224,6 @@ class JSONLDStore:
         """
         if not surname and family_number is None:
             return []
-        def _content_hash(entity: dict) -> str:
-            return hashlib.md5(
-                json.dumps(entity, sort_keys=True).encode(),
-                usedforsecurity=False,
-            ).hexdigest()
-
         with self._lock:
             entities = self._load_graph()
             surname_lower = (surname or "").strip().lower() if surname else ""
