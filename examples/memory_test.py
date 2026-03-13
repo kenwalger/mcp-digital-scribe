@@ -113,6 +113,10 @@ async def main() -> None:
             if not recall_data:
                 print("\nRecall failed", file=sys.stderr)
                 sys.exit(1)
+            if recall_data.get("status") == "error":
+                msg = recall_data.get("message", "Unknown error")
+                print(f"\n{msg}", file=sys.stderr)
+                sys.exit(1)
 
             count = recall_data.get("count", 0)
             residents = recall_data.get("residents", [])

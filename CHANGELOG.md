@@ -34,7 +34,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **_save_graph**: Trailing newline + f.flush() + os.fsync() before os.replace; replaced flag for tmp cleanup
 - **_parse_historical_name**: Strip trailing/leading commas from comma-split parts; exclude empty givenName from JSON-LD
 - **Schema symmetry**: Exclude empty givenName from JSON-LD output; single-token names no longer emit empty string for givenName
-- **memory_test**: Uses data/memory_test_run.jsonld; handles status "error" (archive corrupt) with exit 1
+- **memory_test**: Handles status "error" for both ingest and recall; data/test_archive.jsonld trailing newline added
 - **PEP 8**: logger = logging.getLogger(__name__) moved after all imports in knowledge_store.py
 - **_record_to_jsonld_entity docstring**: name parsing described as familyName (last token) and givenName (all preceding tokens)
 
@@ -49,6 +49,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Robust legacy dedup**: Ingest loop generates fallback ID via _content_hash when match lacks @id; ensures was_created=False skip always triggers
 - **Corruption vs absence**: _load_graph: missing file → []; JSONDecodeError → raise ArchiveCorruptionError (prevents data loss from overwriting with [])
 - **ingest_resident**: Catches ArchiveCorruptionError; returns status "error" with CRITICAL message; ingestion halted
+- **cross_reference_resident**: Catches ArchiveCorruptionError; returns status "error" with CRITICAL message; recall halted (consistent with ingest_resident)
 
 ---
 

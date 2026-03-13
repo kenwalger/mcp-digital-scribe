@@ -184,8 +184,14 @@ def cross_reference_resident(
         raise ValueError("Provide surname and/or family_number")
     if family_number is not None and family_number < 1:
         raise ValueError("family_number must be >= 1")
-    results = _get_knowledge_store().search_by_surname_or_family(
-        surname=surname,
-        family_number=family_number,
-    )
+    try:
+        results = _get_knowledge_store().search_by_surname_or_family(
+            surname=surname,
+            family_number=family_number,
+        )
+    except ArchiveCorruptionError:
+        return {
+            "status": "error",
+            "message": "CRITICAL: The knowledge archive is corrupt. Recall halted to prevent data loss.",
+        }
     return {"count": len(results), "residents": results}
