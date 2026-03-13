@@ -13,7 +13,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
 - **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution
 - **DIGITAL_SCRIBE_ARCHIVE_PATH**: Environment variable to override archive path; used by memory_test to target data/test_archive.jsonld
-- **Deterministic fallback IDs**: Legacy entities without @id get urn:uuid:legacy-{i}-{md5(content)} for stable IDs across process restarts
+- **Deterministic fallback IDs**: Legacy entities without @id get urn:uuid:legacy-{content_hash}; content-derived only (no index); usedforsecurity=False for FIPS; true stability across process restarts and archive growth
+- **test_ingest_and_recall_success**: Positive-path test for ingest → recall flow
 
 ### Changed
 
@@ -26,7 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Lazy store instantiation**: server.py creates JSONLDStore only when ingest_resident or cross_reference_resident is first called
 - **Deduplication fix**: search_by_surname_or_family no longer drops entities without @id; assigns urn:uuid:legacy-* fallback for legacy records; ingest enforces @id on all new entities
 - **Thread-safe singleton**: _get_knowledge_store() uses global threading.Lock and double-checked locking for true singleton
-- **search_by_surname_or_family**: Loads graph once and filters in-memory; ensures consistent fallback IDs for deduplication
+- **search_by_surname_or_family**: Loads graph once and filters in-memory; content-hash for legacy IDs (no enumerate); ensures consistent fallback IDs for deduplication
+- **_save_graph**: try/finally with tmp cleanup on error; ensures .tmp file is removed if os.replace never reached
+- **Schema symmetry**: Exclude empty givenName from JSON-LD output; single-token names no longer emit empty string for givenName
 - **memory_test**: Uses data/test_archive.jsonld via DIGITAL_SCRIBE_ARCHIVE_PATH; no longer truncates production archive
 
 ### Fixed
@@ -35,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Postcondition hardening**: Replaced bare assert with RuntimeError for @id validation; safe in optimized Python (-O)
 - **family_number validation**: cross_reference_resident now rejects family_number < 1 with a clear error message
 - **Dead code**: Removed unreachable len(parts)==1 branch in _parse_historical_name comma-handling
+- **Atomic write robustness**: _save_graph uses try/finally; .tmp file deleted if os.replace fails
 
 ---
 

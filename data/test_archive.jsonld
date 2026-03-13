@@ -74,5 +74,43 @@
     "censusDwellingNumber": 1,
     "censusRelationshipToHead": "Wife",
     "censusMaritalStatus": "Single"
+  },
+  {
+    "@context": "https://schema.org/",
+    "@type": "Person",
+    "@id": "urn:uuid:4802bda0-f0d7-47d4-8df3-b4bb3f0f3a7c",
+    "givenName": "John",
+    "familyName": "Smith",
+    "hasOccupation": {
+      "@type": "Occupation",
+      "name": "Farmer"
+    },
+    "birthPlace": {
+      "@type": "Place",
+      "name": "New York"
+    },
+    "censusFamilyNumber": 1,
+    "censusDwellingNumber": 1,
+    "censusRelationshipToHead": "Head",
+    "censusMaritalStatus": "Married"
+  },
+  {
+    "@context": "https://schema.org/",
+    "@type": "Person",
+    "@id": "urn:uuid:8b774fcc-d950-4901-949c-a36d1dc40c83",
+    "givenName": "Mary",
+    "familyName": "Johnson",
+    "hasOccupation": {
+      "@type": "Occupation",
+      "name": "Keeping House"
+    },
+    "birthPlace": {
+      "@type": "Place",
+      "name": "Pennsylvania"
+    },
+    "censusFamilyNumber": 1,
+    "censusDwellingNumber": 1,
+    "censusRelationshipToHead": "Wife",
+    "censusMaritalStatus": "Single"
   }
 ]

@@ -76,6 +76,8 @@ def _record_to_jsonld_entity(record: Census1880Record, entity_id: str | None = N
     }
     if not family:
         del entity["familyName"]
+    if not given:
+        del entity["givenName"]
     return entity
 
 
@@ -119,11 +121,15 @@ class JSONLDStore:
     def _save_graph(self, entities: list[dict]) -> None:
         """Persist entities using write-to-temp + os.replace for atomic writes."""
         tmp_path = self._path.with_suffix(self._path.suffix + ".tmp")
-        tmp_path.write_text(
-            json.dumps(entities, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
-        os.replace(tmp_path, self._path)
+        try:
+            tmp_path.write_text(
+                json.dumps(entities, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            os.replace(tmp_path, self._path)
+        finally:
+            if tmp_path.exists():
+                tmp_path.unlink()
 
     def ingest(self, record: Census1880Record) -> str:
         """Ingest a Census1880Record, transform to JSON-LD, append to archive. Returns entity @id.
@@ -184,10 +190,16 @@ class JSONLDStore:
         """
         if not surname and family_number is None:
             return []
+        def _content_hash(entity: dict) -> str:
+            return hashlib.md5(
+                json.dumps(entity, sort_keys=True).encode(),
+                usedforsecurity=False,
+            ).hexdigest()
+
         with self._lock:
             entities = self._load_graph()
-            candidates: list[dict] = []
             surname_lower = (surname or "").strip().lower() if surname else ""
+            candidates: list[dict] = []
             for e in entities:
                 match_surname = (
                     bool(surname_lower)
@@ -202,13 +214,10 @@ class JSONLDStore:
                     candidates.append(e)
             seen_ids: set[str] = set()
             results: list[dict] = []
-            for i, e in enumerate(candidates):
+            for e in candidates:
                 eid = e.get("@id")
                 if not eid or not isinstance(eid, str):
-                    content_hash = hashlib.md5(
-                        json.dumps(e, sort_keys=True).encode()
-                    ).hexdigest()
-                    eid = f"urn:uuid:legacy-{i}-{content_hash}"
+                    eid = f"urn:uuid:legacy-{_content_hash(e)}"
                     e = {**e, "@id": eid}
                 if eid not in seen_ids:
                     seen_ids.add(eid)
