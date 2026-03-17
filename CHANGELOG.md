@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Social Graph (Extended Household)**: `link_household` in `knowledge_store.py` — Nuclear: Wife→spouse, Son/Daughter→parent to Head. Extended: Boarder/Servant/Employee/Cook→`memberOfHousehold` + `schema:knows` to Head. All links include `relationshipDescription` to preserve census term
+- **search_by_dwelling**: Returns all residents in a dwelling (physical building); critical for "Mapping the Block" / multi-family dwellings
+- **link_household_relationships tool**: MCP tool groups by `family_number` (handles multiple heads in one dwelling), links households. Dry Run mode returns proposed links without writing
+- **test_social_graph_links**: Ingest Head (Farmer) + Boarder (Blacksmith), link household, verify Blacksmith has `memberOfHousehold` to Farmer
+
+### Changed
+
+- **README**: New "Social Graph (Non-Nuclear Relationships)" section — models extended household as graph, not just genealogy
+
+### Added (prior)
+
 - **_parse_historical_name**: Robust name parsing for Schema.org Person; handles "Surname, Given Name" and multi-word given names (e.g. "Mary Ann Jones")
 - **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
 - **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution

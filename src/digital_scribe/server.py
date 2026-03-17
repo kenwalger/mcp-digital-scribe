@@ -3,6 +3,7 @@
 import json
 import threading
 import zlib
+from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -195,3 +196,86 @@ def cross_reference_resident(
             "message": "CRITICAL: The knowledge archive is corrupt. Recall halted to prevent data loss.",
         }
     return {"count": len(results), "residents": results}
+
+
+@mcp.tool()
+def search_by_dwelling(dwelling_number: int) -> dict[str, Any]:
+    """Search for all residents in a dwelling (physical building).
+
+    'Mapping the Block' narrative: returns everyone in the same physical
+    structure regardless of family unit. Handles multi-family dwellings
+    (e.g. two families sharing one building).
+    """
+    if dwelling_number < 1:
+        raise ValueError("dwelling_number must be >= 1")
+    try:
+        results = _get_knowledge_store().search_by_dwelling(dwelling_number)
+    except ArchiveCorruptionError:
+        return {
+            "status": "error",
+            "message": "CRITICAL: The knowledge archive is corrupt. Search halted.",
+        }
+    return {"count": len(results), "residents": results}
+
+
+@mcp.tool()
+def link_household_relationships(dwelling_number: int, dry_run: bool = False) -> dict[str, Any]:
+    """Create semantic links between household members in a dwelling.
+
+    Groups residents by family_number (handles multiple heads in one dwelling),
+    then links each member to their Head based on census relationship:
+    - Nuclear: Wife->spouse, Son/Daughter->parent
+    - Extended: Boarder/Servant/Employee/Cook->memberOfHousehold + knows
+
+    Dry Run: Returns proposed links without writing. Use to verify the graph
+    before committing.
+    """
+    if dwelling_number < 1:
+        raise ValueError("dwelling_number must be >= 1")
+    store = _get_knowledge_store()
+    try:
+        residents = store.search_by_dwelling(dwelling_number)
+    except ArchiveCorruptionError:
+        return {
+            "status": "error",
+            "message": "CRITICAL: The knowledge archive is corrupt. Linking halted.",
+        }
+    if not residents:
+        return {"status": "no_residents", "dwelling_number": dwelling_number}
+
+    by_family: defaultdict[int, list[dict]] = defaultdict(list)
+    for r in residents:
+        fn = r.get("censusFamilyNumber")
+        if fn is not None and fn >= 1:
+            by_family[fn].append(r)
+
+    if dry_run:
+        all_proposed: list[dict] = []
+        for family_number, family_entities in sorted(by_family.items()):
+            ids = [e.get("@id") for e in family_entities if e.get("@id")]
+            if not ids:
+                continue
+            result = store.link_household(ids, dry_run=True)
+            if isinstance(result, dict) and "proposed_links" in result:
+                for link in result["proposed_links"]:
+                    link["family_number"] = family_number
+                    all_proposed.append(link)
+        return {
+            "status": "dry_run",
+            "dwelling_number": dwelling_number,
+            "families": len(by_family),
+            "proposed_links": all_proposed,
+        }
+
+    linked_count = 0
+    for family_entities in by_family.values():
+        ids = [e.get("@id") for e in family_entities if e.get("@id")]
+        if ids:
+            store.link_household(ids)
+            linked_count += len(family_entities)
+    return {
+        "status": "linked",
+        "dwelling_number": dwelling_number,
+        "families": len(by_family),
+        "residents_linked": linked_count,
+    }

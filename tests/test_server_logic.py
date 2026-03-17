@@ -2,7 +2,12 @@
 
 import pytest
 
-from digital_scribe.server import cross_reference_resident, ingest_resident, transcribe_census_row
+from digital_scribe.server import (
+    cross_reference_resident,
+    ingest_resident,
+    link_household_relationships,
+    transcribe_census_row,
+)
 
 
 def test_transcribe_rejects_negative_row_index() -> None:
@@ -79,3 +84,53 @@ def test_ingest_and_recall_success() -> None:
     assert found is not None
     assert found.get("givenName") == "Test"
     assert found.get("familyName") == "Person"
+
+
+def test_social_graph_links() -> None:
+    """Ingest Head (Farmer) and Boarder (Blacksmith), link household, verify memberOfHousehold."""
+    head_record = {
+        "dwelling_number": 5,
+        "family_number": 3,
+        "name": "John Farmer",
+        "relationship_to_head": "Head",
+        "marital_status": "Married",
+        "occupation": "Farmer",
+        "birthplace": "Ohio",
+        "handwriting_confidence": 0.9,
+    }
+    boarder_record = {
+        "dwelling_number": 5,
+        "family_number": 3,
+        "name": "Tom Blacksmith",
+        "relationship_to_head": "Boarder",
+        "marital_status": "Single",
+        "occupation": "Blacksmith",
+        "birthplace": "Ireland",
+        "handwriting_confidence": 0.85,
+    }
+    ingest_resident(head_record)
+    ingest_resident(boarder_record)
+
+    result = link_household_relationships(dwelling_number=5, dry_run=False)
+    assert result.get("status") == "linked"
+    assert result.get("families") == 1
+    assert result.get("residents_linked") == 2
+
+    recall = cross_reference_resident(family_number=3)
+    residents = recall.get("residents", [])
+    blacksmith = next(
+        (r for r in residents if (r.get("hasOccupation", {}).get("name") == "Blacksmith")),
+        None,
+    )
+    assert blacksmith is not None
+    member_of = blacksmith.get("memberOfHousehold")
+    assert member_of is not None
+    assert member_of.get("@id") is not None
+
+    farmer = next(
+        (r for r in residents if (r.get("hasOccupation", {}).get("name") == "Farmer")),
+        None,
+    )
+    assert farmer is not None
+    assert member_of.get("@id") == farmer.get("@id")
+    assert member_of.get("relationshipDescription") == "Boarder"

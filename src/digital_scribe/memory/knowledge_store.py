@@ -271,3 +271,114 @@ class JSONLDStore:
                     seen_ids.add(eid)
                     results.append(e)
         return results
+
+    def search_by_dwelling(self, dwelling_number: int) -> list[dict]:
+        """Return all entities in the given dwelling_number (physical building).
+
+        Critical for 'Mapping the Block' — see everyone in the same physical
+        structure regardless of family unit. Handles multi-family dwellings.
+        """
+        if dwelling_number < 1:
+            return []
+        with self._lock:
+            entities = self._load_graph()
+            return [e for e in entities if e.get("censusDwellingNumber") == dwelling_number]
+
+    def link_household(self, entity_ids: list[str], dry_run: bool = False) -> list[dict] | dict:
+        """Create semantic links between household members based on census relationship.
+
+        Nuclear Family:
+        - Wife -> spouse link to Head; relationshipDescription preserves census term.
+        - Son/Daughter -> parent link to Head; relationshipDescription preserves census term.
+
+        Extended Household (Boarders, Servants, Employees, Cooks):
+        - memberOfHousehold (links to Head's @id) + schema:knows link.
+        - relationshipDescription preserves original census term (e.g. 'Boarder').
+
+        Args:
+            entity_ids: @id values of entities in the household (same family_number).
+            dry_run: If True, return proposed links without writing to disk.
+
+        Returns:
+            If dry_run: dict with "proposed_links" (list of {from_id, to_id, link_type, relationshipDescription}).
+            Else: list of linked entities.
+        """
+        if not entity_ids:
+            return [] if not dry_run else {"proposed_links": []}
+        id_set = set(entity_ids)
+        with self._lock:
+            entities = self._load_graph()
+            family = [e for e in entities if e.get("@id") in id_set]
+            if not family:
+                return [] if not dry_run else {"proposed_links": []}
+            head = next(
+                (
+                    e
+                    for e in family
+                    if (e.get("censusRelationshipToHead") or "").strip().lower() == "head"
+                ),
+                None,
+            )
+            if not head:
+                return family if not dry_run else {"proposed_links": []}
+            head_id = head.get("@id")
+            if not head_id:
+                return family if not dry_run else {"proposed_links": []}
+
+            proposed: list[dict] = []
+            for entity in family:
+                if entity is head:
+                    continue
+                member_id = entity.get("@id")
+                rel_raw = (entity.get("censusRelationshipToHead") or "").strip()
+                rel_lower = rel_raw.lower()
+
+                if rel_lower == "wife":
+                    proposed.append({
+                        "from_id": member_id,
+                        "to_id": head_id,
+                        "link_type": "spouse",
+                        "relationshipDescription": rel_raw,
+                    })
+                    if not dry_run:
+                        entity["spouse"] = {"@id": head_id, "relationshipDescription": rel_raw}
+                elif rel_lower in ("son", "daughter"):
+                    proposed.append({
+                        "from_id": member_id,
+                        "to_id": head_id,
+                        "link_type": "parent",
+                        "relationshipDescription": rel_raw,
+                    })
+                    if not dry_run:
+                        entity.setdefault("parent", [])
+                        parents = entity["parent"]
+                        if isinstance(parents, list):
+                            if not any(
+                                p.get("@id") == head_id for p in parents if isinstance(p, dict)
+                            ):
+                                parents.append({"@id": head_id, "relationshipDescription": rel_raw})
+                        else:
+                            entity["parent"] = [{"@id": head_id, "relationshipDescription": rel_raw}]
+                elif rel_lower in ("boarder", "servant", "employee", "cook"):
+                    proposed.append({
+                        "from_id": member_id,
+                        "to_id": head_id,
+                        "link_type": "memberOfHousehold",
+                        "relationshipDescription": rel_raw,
+                    })
+                    if not dry_run:
+                        entity["memberOfHousehold"] = {"@id": head_id, "relationshipDescription": rel_raw}
+                        entity.setdefault("knows", [])
+                        knows = entity["knows"]
+                        if isinstance(knows, list):
+                            if not any(
+                                k.get("@id") == head_id for k in knows if isinstance(k, dict)
+                            ):
+                                knows.append({"@id": head_id})
+                        else:
+                            entity["knows"] = {"@id": head_id}
+
+            if dry_run:
+                return {"proposed_links": proposed}
+            self._save_graph(entities)
+        return family
