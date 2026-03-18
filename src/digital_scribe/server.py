@@ -3,7 +3,6 @@
 import json
 import threading
 import zlib
-from collections import defaultdict
 from pathlib import Path
 from typing import Any
 
@@ -206,8 +205,6 @@ def search_by_dwelling(dwelling_number: int) -> dict[str, Any]:
     structure regardless of family unit. Handles multi-family dwellings
     (e.g. two families sharing one building).
     """
-    if dwelling_number < 1:
-        raise ValueError("dwelling_number must be >= 1")
     try:
         results = _get_knowledge_store().search_by_dwelling(dwelling_number)
     except ArchiveCorruptionError:
@@ -222,60 +219,35 @@ def search_by_dwelling(dwelling_number: int) -> dict[str, Any]:
 def link_household_relationships(dwelling_number: int, dry_run: bool = False) -> dict[str, Any]:
     """Create semantic links between household members in a dwelling.
 
-    Groups residents by family_number (handles multiple heads in one dwelling),
-    then links each member to their Head based on census relationship:
+    Atomically links all families: load once, link in memory, save once.
+    Groups by family_number (handles multiple heads in one dwelling).
     - Nuclear: Wife->spouse, Son/Daughter->parent
     - Extended: Boarder/Servant/Employee/Cook->memberOfHousehold + knows
 
     Dry Run: Returns proposed links without writing. Use to verify the graph
     before committing.
     """
-    if dwelling_number < 1:
-        raise ValueError("dwelling_number must be >= 1")
     store = _get_knowledge_store()
     try:
-        residents = store.search_by_dwelling(dwelling_number)
-        if not residents:
-            return {"status": "no_residents", "dwelling_number": dwelling_number}
-
-        by_family: defaultdict[int, list[dict]] = defaultdict(list)
-        for r in residents:
-            fn = r.get("censusFamilyNumber")
-            if fn is not None and fn >= 1:
-                by_family[fn].append(r)
-
-        if dry_run:
-            all_proposed: list[dict] = []
-            for family_number, family_entities in sorted(by_family.items()):
-                ids = [e.get("@id") for e in family_entities if e.get("@id")]
-                if not ids:
-                    continue
-                result = store.link_household(ids, dry_run=True)
-                if isinstance(result, dict) and "proposed_links" in result:
-                    for link in result["proposed_links"]:
-                        link["family_number"] = family_number
-                        all_proposed.append(link)
+        result = store.link_dwelling(dwelling_number, dry_run=dry_run)
+        if "proposed_links" in result:
             return {
                 "status": "dry_run",
                 "dwelling_number": dwelling_number,
-                "families": len(by_family),
-                "proposed_links": all_proposed,
+                "families": result.get("families", 0),
+                "proposed_links": result["proposed_links"],
             }
-
-        links_created_count = 0
-        for family_entities in by_family.values():
-            ids = [e.get("@id") for e in family_entities if e.get("@id")]
-            if ids:
-                result = store.link_household(ids)
-                if isinstance(result, tuple):
-                    _, count = result
-                    links_created_count += count
+        modified = result["modified_entities"]
+        if not modified:
+            return {"status": "no_residents", "dwelling_number": dwelling_number}
         return {
             "status": "linked",
             "dwelling_number": dwelling_number,
-            "families": len(by_family),
-            "residents_linked": links_created_count,
+            "families": len({e.get("censusFamilyNumber") for e in modified}),
+            "residents_linked": result["links_created"],
         }
+    except ValueError:
+        raise
     except ArchiveCorruptionError:
         return {
             "status": "error",

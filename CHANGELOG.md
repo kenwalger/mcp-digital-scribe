@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **test_link_multi_family_dwelling_atomicity**: Two families in one dwelling; both linked in single call
 - **test_link_household_dry_run**: Verifies dry run returns proposed links and leaves archive unchanged (hash comparison)
 - **test_search_by_dwelling_tool**: Verifies dwelling_number < 1 raises ValueError
 - **test_multi_relation_household**: Head + Wife + two Boarders; verifies symmetric spouse, Head knows both boarders, no data overwritten
@@ -21,8 +22,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **README**: New "Social Graph (Non-Nuclear Relationships)" section — models extended household as graph, not just genealogy
 - **_add_to_relation**: Returns bool (True if added); used for accurate link counting; memberOfHousehold now uses it
-- **link_household**: Returns (modified_entities, links_created_count); counts only new pointers added; memberOfHousehold uses _add_to_relation (idempotency)
-- **link_household_relationships**: Uses accurate links_created_count from store for residents_linked (0 when no Head); wrapped in try/except ArchiveCorruptionError
+- **link_household**: Returns LinkResult/DryRunResult (type-safe); uses _process_family_links helper
+- **link_dwelling**: Atomic linking — load once, link all families in memory, save once
+- **link_household_relationships**: Calls link_dwelling; no isinstance dispatch
+- **search_by_dwelling**: dwelling_number < 1 validation moved into store (single source of truth); server lets ValueError propagate
+- **test_link_household_dry_run**: Uses `with open(...) as f` for file operations
 
 ### Fixed
 

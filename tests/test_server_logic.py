@@ -280,7 +280,8 @@ def test_link_household_dry_run() -> None:
 
     archive_path = os.environ.get("DIGITAL_SCRIBE_ARCHIVE_PATH")
     assert archive_path, "DIGITAL_SCRIBE_ARCHIVE_PATH must be set by conftest"
-    content_before = open(archive_path, "rb").read()
+    with open(archive_path, "rb") as f:
+        content_before = f.read()
     hash_before = hashlib.sha256(content_before).hexdigest()
 
     result = link_household_relationships(dwelling_number=9, dry_run=True)
@@ -288,7 +289,8 @@ def test_link_household_dry_run() -> None:
     assert "proposed_links" in result
     assert len(result.get("proposed_links", [])) >= 1
 
-    content_after = open(archive_path, "rb").read()
+    with open(archive_path, "rb") as f:
+        content_after = f.read()
     hash_after = hashlib.sha256(content_after).hexdigest()
     assert hash_before == hash_after, "Archive must be unchanged after dry run"
 
@@ -299,3 +301,82 @@ def test_search_by_dwelling_tool() -> None:
         search_by_dwelling(0)
     with pytest.raises(ValueError, match="dwelling_number must be >= 1"):
         search_by_dwelling(-1)
+
+
+def test_link_multi_family_dwelling_atomicity() -> None:
+    """Two families in one dwelling; both linked correctly in a single tool call."""
+    dwelling = 10
+    ingest_resident({
+        "dwelling_number": dwelling,
+        "family_number": 8,
+        "name": "Adam Alpha",
+        "relationship_to_head": "Head",
+        "marital_status": "Married",
+        "occupation": "Farmer",
+        "birthplace": "Ohio",
+        "handwriting_confidence": 0.9,
+    })
+    ingest_resident({
+        "dwelling_number": dwelling,
+        "family_number": 8,
+        "name": "Eve Alpha",
+        "relationship_to_head": "Wife",
+        "marital_status": "Married",
+        "occupation": "Keeping House",
+        "birthplace": "Pennsylvania",
+        "handwriting_confidence": 0.92,
+    })
+    ingest_resident({
+        "dwelling_number": dwelling,
+        "family_number": 9,
+        "name": "Bob Beta",
+        "relationship_to_head": "Head",
+        "marital_status": "Single",
+        "occupation": "Laborer",
+        "birthplace": "Ireland",
+        "handwriting_confidence": 0.88,
+    })
+    ingest_resident({
+        "dwelling_number": dwelling,
+        "family_number": 9,
+        "name": "Carl Boarder",
+        "relationship_to_head": "Boarder",
+        "marital_status": "Single",
+        "occupation": "Servant",
+        "birthplace": "Germany",
+        "handwriting_confidence": 0.85,
+    })
+
+    result = link_household_relationships(dwelling_number=dwelling, dry_run=False)
+    assert result.get("status") == "linked"
+    assert result.get("families") == 2
+
+    fam8 = cross_reference_resident(family_number=8)
+    fam9 = cross_reference_resident(family_number=9)
+    residents_8 = fam8.get("residents", [])
+    residents_9 = fam9.get("residents", [])
+
+    adam = next((r for r in residents_8 if (r.get("hasOccupation") or {}).get("name") == "Farmer"), None)
+    eve = next((r for r in residents_8 if (r.get("hasOccupation") or {}).get("name") == "Keeping House"), None)
+    bob = next((r for r in residents_9 if (r.get("hasOccupation") or {}).get("name") == "Laborer"), None)
+    carl = next((r for r in residents_9 if (r.get("hasOccupation") or {}).get("name") == "Servant"), None)
+
+    assert adam is not None and eve is not None
+    assert bob is not None and carl is not None
+
+    def _spouse_ids(p: dict) -> list[str]:
+        s = p.get("spouse")
+        if isinstance(s, list):
+            return [x.get("@id") for x in s if isinstance(x, dict) and x.get("@id")]
+        return [s.get("@id")] if isinstance(s, dict) and s.get("@id") else []
+
+    assert eve.get("@id") in _spouse_ids(adam)
+    assert adam.get("@id") in _spouse_ids(eve)
+
+    def _moh_id(p: dict) -> str | None:
+        moh = p.get("memberOfHousehold")
+        if isinstance(moh, list) and moh:
+            return moh[0].get("@id") if isinstance(moh[0], dict) else None
+        return moh.get("@id") if isinstance(moh, dict) else None
+
+    assert _moh_id(carl) == bob.get("@id")
