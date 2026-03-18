@@ -28,42 +28,45 @@ class ArchiveCorruptionError(RuntimeError):
     """
 
 
-def _add_to_relation(entity: dict, property_name: str, value: dict) -> None:
+def _add_to_relation(entity: dict, property_name: str, value: dict) -> bool:
     """Append a relation value without overwriting existing entries.
 
     If entity[property_name] does not exist, sets it to [value].
     If it is a single string/dict, converts to list with [old, value].
     If already a list, appends value only if not already present (deduplication by @id).
+
+    Returns True if a new pointer was added, False if skipped (duplicate).
     """
     target_id = value.get("@id") if isinstance(value, dict) else None
     if not target_id:
-        return
+        return False
 
     existing = entity.get(property_name)
     if existing is None:
         entity[property_name] = [value]
-        return
+        return True
 
     if isinstance(existing, dict):
         if existing.get("@id") == target_id:
-            return
+            return False
         entity[property_name] = [existing, value]
-        return
+        return True
 
     if isinstance(existing, str):
         if existing == target_id:
-            return
+            return False
         entity[property_name] = [existing, value]
-        return
+        return True
 
     if isinstance(existing, list):
         for item in existing:
             if isinstance(item, dict) and item.get("@id") == target_id:
-                return
+                return False
             if item == target_id:
-                return
+                return False
         existing.append(value)
-        return
+        return True
+    return False
 
 
 def _content_hash(entity: dict) -> str:
@@ -322,7 +325,9 @@ class JSONLDStore:
             entities = self._load_graph()
             return [e for e in entities if e.get("censusDwellingNumber") == dwelling_number]
 
-    def link_household(self, entity_ids: list[str], dry_run: bool = False) -> list[dict] | dict:
+    def link_household(
+        self, entity_ids: list[str], dry_run: bool = False
+    ) -> tuple[list[dict], int] | dict:
         """Create semantic links between household members based on census relationship.
 
         Nuclear Family:
@@ -339,16 +344,17 @@ class JSONLDStore:
 
         Returns:
             If dry_run: dict with "proposed_links" (list of {from_id, to_id, link_type, relationshipDescription}).
-            Else: list of linked entities.
+            Else: (modified_entities, links_created_count). links_created_count only increments when a
+            new relationship pointer is actually added (not duplicate).
         """
         if not entity_ids:
-            return [] if not dry_run else {"proposed_links": []}
+            return ([], 0) if not dry_run else {"proposed_links": []}
         id_set = set(entity_ids)
         with self._lock:
             entities = self._load_graph()
             family = [e for e in entities if e.get("@id") in id_set]
             if not family:
-                return [] if not dry_run else {"proposed_links": []}
+                return ([], 0) if not dry_run else {"proposed_links": []}
             head = next(
                 (
                     e
@@ -358,12 +364,13 @@ class JSONLDStore:
                 None,
             )
             if not head:
-                return family if not dry_run else {"proposed_links": []}
+                return (family, 0) if not dry_run else {"proposed_links": []}
             head_id = head.get("@id")
             if not head_id:
-                return family if not dry_run else {"proposed_links": []}
+                return (family, 0) if not dry_run else {"proposed_links": []}
 
             proposed: list[dict] = []
+            links_created = 0
             for entity in family:
                 if entity is head:
                     continue
@@ -381,8 +388,10 @@ class JSONLDStore:
                     if not dry_run:
                         spouse_link = {"@id": head_id, "relationshipDescription": rel_raw}
                         spouse_back = {"@id": member_id, "relationshipDescription": rel_raw}
-                        _add_to_relation(entity, "spouse", spouse_link)
-                        _add_to_relation(head, "spouse", spouse_back)
+                        if _add_to_relation(entity, "spouse", spouse_link):
+                            links_created += 1
+                        if _add_to_relation(head, "spouse", spouse_back):
+                            links_created += 1
                 elif rel_lower in ("son", "daughter"):
                     proposed.append({
                         "from_id": member_id,
@@ -391,7 +400,8 @@ class JSONLDStore:
                         "relationshipDescription": rel_raw,
                     })
                     if not dry_run:
-                        _add_to_relation(entity, "parent", {"@id": head_id, "relationshipDescription": rel_raw})
+                        if _add_to_relation(entity, "parent", {"@id": head_id, "relationshipDescription": rel_raw}):
+                            links_created += 1
                 elif rel_lower in ("boarder", "servant", "employee", "cook"):
                     proposed.append({
                         "from_id": member_id,
@@ -400,11 +410,15 @@ class JSONLDStore:
                         "relationshipDescription": rel_raw,
                     })
                     if not dry_run:
-                        entity["memberOfHousehold"] = {"@id": head_id, "relationshipDescription": rel_raw}
-                        _add_to_relation(entity, "knows", {"@id": head_id})
-                        _add_to_relation(head, "knows", {"@id": member_id})
+                        moh_val = {"@id": head_id, "relationshipDescription": rel_raw}
+                        if _add_to_relation(entity, "memberOfHousehold", moh_val):
+                            links_created += 1
+                        if _add_to_relation(entity, "knows", {"@id": head_id}):
+                            links_created += 1
+                        if _add_to_relation(head, "knows", {"@id": member_id}):
+                            links_created += 1
 
             if dry_run:
                 return {"proposed_links": proposed}
             self._save_graph(entities)
-        return family
+        return (family, links_created)

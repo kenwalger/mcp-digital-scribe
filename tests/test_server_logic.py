@@ -1,11 +1,15 @@
 """Server logic tests — transcribe_census_row, ingest_resident, and error handling."""
 
+import hashlib
+import os
+
 import pytest
 
 from digital_scribe.server import (
     cross_reference_resident,
     ingest_resident,
     link_household_relationships,
+    search_by_dwelling,
     transcribe_census_row,
 )
 
@@ -114,7 +118,7 @@ def test_social_graph_links() -> None:
     result = link_household_relationships(dwelling_number=5, dry_run=False)
     assert result.get("status") == "linked"
     assert result.get("families") == 1
-    assert result.get("residents_linked") == 2
+    assert result.get("residents_linked") == 3
 
     recall = cross_reference_resident(family_number=3)
     residents = recall.get("residents", [])
@@ -123,7 +127,8 @@ def test_social_graph_links() -> None:
         None,
     )
     assert blacksmith is not None
-    member_of = blacksmith.get("memberOfHousehold")
+    moh = blacksmith.get("memberOfHousehold")
+    member_of = moh[0] if isinstance(moh, list) and moh else (moh if isinstance(moh, dict) else None)
     assert member_of is not None
     assert member_of.get("@id") is not None
 
@@ -186,7 +191,7 @@ def test_multi_relation_household() -> None:
     result = link_household_relationships(dwelling_number=7, dry_run=False)
     assert result.get("status") == "linked"
     assert result.get("families") == 1
-    assert result.get("residents_linked") == 4
+    assert result.get("residents_linked") == 8
 
     recall = cross_reference_resident(family_number=4)
     residents = recall.get("residents", [])
@@ -243,5 +248,54 @@ def test_multi_relation_household() -> None:
     assert boarder2.get("@id") in head_knows, "Head must know Boarder2"
     assert len(head_knows) == 2, "Head has exactly two knows entries (both Boarders, no overwrite)"
 
-    assert boarder1.get("memberOfHousehold", {}).get("@id") == head_id
-    assert boarder2.get("memberOfHousehold", {}).get("@id") == head_id
+    def _moh_head_id(person: dict) -> str | None:
+        moh = person.get("memberOfHousehold")
+        if isinstance(moh, list) and moh and isinstance(moh[0], dict):
+            return moh[0].get("@id")
+        return moh.get("@id") if isinstance(moh, dict) else None
+
+    assert _moh_head_id(boarder1) == head_id
+    assert _moh_head_id(boarder2) == head_id
+
+
+def test_link_household_dry_run() -> None:
+    """Dry run returns proposed links but does NOT modify the archive on disk."""
+    record = {
+        "dwelling_number": 9,
+        "family_number": 6,
+        "name": "Dry Run Family",
+        "relationship_to_head": "Head",
+        "marital_status": "Married",
+        "occupation": "Farmer",
+        "birthplace": "Ohio",
+        "handwriting_confidence": 0.9,
+    }
+    ingest_resident(record)
+    ingest_resident({
+        **record,
+        "name": "Wife Dry",
+        "relationship_to_head": "Wife",
+        "occupation": "Keeping House",
+    })
+
+    archive_path = os.environ.get("DIGITAL_SCRIBE_ARCHIVE_PATH")
+    assert archive_path, "DIGITAL_SCRIBE_ARCHIVE_PATH must be set by conftest"
+    content_before = open(archive_path, "rb").read()
+    hash_before = hashlib.sha256(content_before).hexdigest()
+
+    result = link_household_relationships(dwelling_number=9, dry_run=True)
+    assert result.get("status") == "dry_run"
+    assert "proposed_links" in result
+    assert len(result.get("proposed_links", [])) >= 1
+
+    content_after = open(archive_path, "rb").read()
+    hash_after = hashlib.sha256(content_after).hexdigest()
+    assert hash_before == hash_after, "Archive must be unchanged after dry run"
+
+
+def test_search_by_dwelling_tool() -> None:
+    """search_by_dwelling rejects dwelling_number < 1 with standard ValueError."""
+    with pytest.raises(ValueError, match="dwelling_number must be >= 1"):
+        search_by_dwelling(0)
+    with pytest.raises(ValueError, match="dwelling_number must be >= 1"):
+        search_by_dwelling(-1)

@@ -262,17 +262,19 @@ def link_household_relationships(dwelling_number: int, dry_run: bool = False) ->
                 "proposed_links": all_proposed,
             }
 
-        linked_count = 0
+        links_created_count = 0
         for family_entities in by_family.values():
             ids = [e.get("@id") for e in family_entities if e.get("@id")]
             if ids:
-                store.link_household(ids)
-                linked_count += len(family_entities)
+                result = store.link_household(ids)
+                if isinstance(result, tuple):
+                    _, count = result
+                    links_created_count += count
         return {
             "status": "linked",
             "dwelling_number": dwelling_number,
             "families": len(by_family),
-            "residents_linked": linked_count,
+            "residents_linked": links_created_count,
         }
     except ArchiveCorruptionError:
         return {
