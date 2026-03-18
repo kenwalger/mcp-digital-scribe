@@ -136,6 +136,51 @@ async def main() -> None:
                 sys.exit(1)
             print("\n✓ Memory lifecycle validated: Capture → Resolve → Ingest → Recall")
 
+            # Social Graph: link household relationships, then fetch fresh data
+            dwelling_num = 1
+            link_result = await session.call_tool(
+                "link_household_relationships",
+                arguments={"dwelling_number": dwelling_num},
+            )
+            link_data = _extract_record_from_result(link_result)
+            if link_data and link_data.get("status") in ("linked", "no_links_created"):
+                links = link_data.get("links_created", 0)
+                print(f"\nSocial Graph (dwelling {dwelling_num}): {links} link(s) created")
+                search_result = await session.call_tool(
+                    "search_by_dwelling",
+                    arguments={"dwelling_number": dwelling_num},
+                )
+                search_data = _extract_record_from_result(search_result)
+                if search_data and search_data.get("status") != "error":
+                    dwell_residents = search_data.get("residents", [])
+                    id_to_name = {
+                        r.get("@id"): " ".join(filter(None, [r.get("givenName"), r.get("familyName")])) or "?"
+                        for r in dwell_residents
+                    }
+                    def _links(r: dict, key: str, label: str) -> list[str]:
+                        val = r.get(key)
+                        items = val if isinstance(val, list) else ([val] if val else [])
+                        return [f"{label}: {id_to_name.get(i['@id'], i['@id'])}" for i in items if isinstance(i, dict) and i.get("@id")]
+
+                    for r in dwell_residents:
+                        name = id_to_name.get(r.get("@id"), "?")
+                        role = r.get("censusRelationshipToHead", "?")
+                        links_info = _links(r, "spouse", "Spouse") + _links(r, "parent", "Parent") + _links(r, "knows", "Knows") + _links(r, "memberOfHousehold", "MemberOfHousehold")
+                        line = f"  - {name} ({role})"
+                        if links_info:
+                            line += " [" + "; ".join(links_info) + "]"
+                        print(line)
+                # Idempotency: second call on same dwelling creates no new links
+                link2_result = await session.call_tool(
+                    "link_household_relationships",
+                    arguments={"dwelling_number": dwelling_num},
+                )
+                link2_data = _extract_record_from_result(link2_result)
+                if link2_data and link2_data.get("status") == "no_links_created" and link2_data.get("links_created", -1) == 0:
+                    print("  (idempotent run: 0 new links)")
+            elif link_data and link_data.get("status") == "error":
+                print(f"\nSocial Graph: {link_data.get('message', 'Unknown error')}", file=sys.stderr)
+
             # Verify test archive is valid JSON-LD for Schema Markup Validator
             archive_text = TEST_ARCHIVE.read_text(encoding="utf-8")
             parsed = json.loads(archive_text)

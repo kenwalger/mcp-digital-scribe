@@ -9,6 +9,61 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **test_link_dwelling_idempotency**: Second link call on same dwelling returns links_created=0 and no_links_created
+- **test_spouse_husband_relationship**: Verifies female Head + Husband get symmetric spouse links (gender-neutral logic)
+- **test_relation_promotion**: Verifies bare string @id in relation field promoted to dict when second relationship added
+- **Social Graph demo**: memory_test calls search_by_dwelling after link_household_relationships; displays actual Spouse/Parent/Knows/MemberOfHousehold links from fresh data
+
+### Changed
+
+- **_process_family_links (dry-run)**: Only propose links that do NOT exist in spouse/parent/memberOfHousehold/knows; 1:1 mirror of actual writes
+- **link_dwelling**: Conditional save — _save_graph only when links_created > 0; no write on idempotent run
+- **memory_test**: Second link call demonstrates idempotency (0 new links)
+- **_add_to_relation**: String (bare @id) normalized to {"@id": val} before list; ensures property always list of dicts, never mix
+- **_process_family_links**: Spouse detection now includes "husband" (gender-neutral; wife and husband both link)
+- **link_household_relationships**: family_count filter uses `fn >= 1` to match store linking logic; excludes negative numbers
+- **memory_test Social Graph**: Removed stale residents usage; post-linking search_by_dwelling now drives display of created links
+- **link_household_relationships**: try/except ValueError returns {"status": "error", "message": str(e)}; symmetric with search_by_dwelling
+- **test_link_invalid_dwelling_id**: Asserts structured error for dwelling_number < 1 (no longer expects raised ValueError)
+- **JSONLDStore.search_by_dwelling** docstring: Explicitly states primary method for 'Mapping the Block' and multi-family analysis
+
+### Added (prior)
+
+- **test_dry_run_symmetry**: Verifies proposed_links has two spouse entries for husband/wife (forward + back)
+- **test_link_invalid_dwelling_id**: link_household_relationships(dwelling_number=0) raises ValueError
+- **test_link_multi_family_dwelling_atomicity**: Two families in one dwelling; both linked in single call
+- **test_link_household_dry_run**: Verifies dry run returns proposed links and leaves archive unchanged (hash comparison)
+- **test_search_by_dwelling_tool**: Verifies dwelling_number < 1 returns structured error
+- **test_multi_relation_household**: Head + Wife + two Boarders; verifies symmetric spouse, Head knows both boarders, no data overwritten
+- **Social Graph (Extended Household)**: `link_dwelling` in `knowledge_store.py` — Nuclear: Wife→spouse, Son/Daughter→parent to Head. Extended: Boarder/Servant/Employee/Cook→`memberOfHousehold` + `schema:knows` to Head. All links include `relationshipDescription` to preserve census term
+- **search_by_dwelling**: Returns all residents in a dwelling (physical building); critical for "Mapping the Block" / multi-family dwellings
+- **link_household_relationships tool**: MCP tool groups by `family_number` (handles multiple heads in one dwelling), links households. Dry Run mode returns proposed links without writing
+- **memory_test**: Social Graph section — link_household_relationships, shows linked individuals with historical roles
+- **test_social_graph_links**: Asserts relationshipDescription in persisted memberOfHousehold and knows
+
+### Changed
+
+- **README**: New "Social Graph (Non-Nuclear Relationships)" section — models extended household as graph, not just genealogy
+- **_add_to_relation**: logger.warning when value missing @id; returns bool for counting
+- **LinkResult**: modified_entities → processed_entities
+- **link_dwelling**: Single atomic entry point; WARNING when resident excluded (invalid censusFamilyNumber)
+- **_process_family_links**: Dry-run proposed_links mirrors write path 1:1; _resolve_entity_id for non-null IDs
+- **link_household_relationships**: Dispatch via dry_run param; no key-checking
+- **_process_family_links**: knows/memberOfHousehold write path includes relationshipDescription (metadata parity with dry-run)
+- **link_dwelling**: Final return moved inside with self._lock for symmetry
+- **search_by_dwelling**: try/except ValueError returns {"status": "error", "message": str(e)}; aligns with corruption handling
+- **test_link_household_dry_run**: Uses `with open(...) as f` for file operations
+
+### Removed
+
+- **link_household**: Dead code; link_dwelling is sole entry point
+
+### Fixed
+
+- **knows data-loss**: Extended-household knows now uses _add_to_relation; no overwrite when multiple boarders/servants
+
+### Added (prior)
+
 - **_parse_historical_name**: Robust name parsing for Schema.org Person; handles "Surname, Given Name" and multi-word given names (e.g. "Mary Ann Jones")
 - **Atomic ingestion**: JSONLDStore uses threading.Lock + write-to-temp + os.replace for atomic writes; prevents silent corruption from concurrent writes
 - **isolated_archive_path**: Pytest autouse fixture in tests/conftest.py that mocks the archive path to a temp directory; prevents production data pollution

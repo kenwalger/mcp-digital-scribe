@@ -5,15 +5,31 @@ to a file-based Knowledge Archive. Aligned with Schema.org standards for
 interoperability. Enables cross-referencing by familyName or censusFamilyNumber.
 """
 
+from __future__ import annotations
+
 import hashlib
 import json
 import logging
 import os
 import threading
 import uuid
+from collections import defaultdict
 from pathlib import Path
+from typing import TypedDict
 
 from digital_scribe.models.census_1880 import Census1880Record, DITTO_MARKS, DITTOABLE_FIELDS
+
+
+class LinkResult(TypedDict):
+    """Type-safe result of household linking (write path)."""
+    processed_entities: list[dict]
+    links_created: int
+
+
+class DryRunResult(TypedDict):
+    """Type-safe result of household linking (dry run path)."""
+    proposed_links: list[dict]
+    families: int
 
 logger = logging.getLogger(__name__)
 
@@ -26,6 +42,184 @@ class ArchiveCorruptionError(RuntimeError):
     Distinguishes corruption from absence: missing file returns []; corrupt
     file raises to prevent _save_graph from overwriting with empty list.
     """
+
+
+def _ensure_relation_dict(item: str | dict) -> dict:
+    """Normalize a relation item to a dict with @id. Strings become {"@id": val}."""
+    if isinstance(item, dict):
+        return item
+    return {"@id": item} if isinstance(item, str) else {"@id": str(item)}
+
+
+def _relation_contains_id(entity: dict, property_name: str, target_id: str) -> bool:
+    """Check if entity already has target_id in the relation property (read-only)."""
+    existing = entity.get(property_name)
+    if existing is None:
+        return False
+    if isinstance(existing, str):
+        return existing == target_id
+    if isinstance(existing, dict):
+        return existing.get("@id") == target_id
+    if isinstance(existing, list):
+        for item in existing:
+            if isinstance(item, dict) and item.get("@id") == target_id:
+                return True
+            if item == target_id:
+                return True
+    return False
+
+
+def _add_to_relation(entity: dict, property_name: str, value: dict) -> bool:
+    """Append a relation value without overwriting existing entries.
+
+    If entity[property_name] does not exist, sets it to [value].
+    If it is a single string (bare @id), converts to {"@id": existing_val} then [that, value].
+    If it is a single dict or list, normalizes to list of dicts (strings promoted to dicts).
+    Ensures property is always a list of dicts, never a mix of strings and dicts.
+
+    Returns True if a new pointer was added, False if skipped (duplicate).
+    """
+    target_id = value.get("@id") if isinstance(value, dict) else None
+    if not target_id:
+        logger.warning(
+            "_add_to_relation called with value missing @id: property=%s, value=%s",
+            property_name,
+            value,
+        )
+        return False
+
+    existing = entity.get(property_name)
+    if existing is None:
+        entity[property_name] = [value]
+        return True
+
+    # Normalize to list of dicts
+    if isinstance(existing, str):
+        if existing == target_id:
+            return False
+        entity[property_name] = [{"@id": existing}, value]
+        return True
+
+    if isinstance(existing, dict):
+        if existing.get("@id") == target_id:
+            return False
+        entity[property_name] = [existing, value]
+        return True
+
+    if isinstance(existing, list):
+        normalized: list[dict] = [_ensure_relation_dict(i) for i in existing]
+        for item in normalized:
+            if item.get("@id") == target_id:
+                return False
+        normalized.append(value)
+        entity[property_name] = normalized
+        return True
+    return False
+
+
+def _resolve_entity_id(entity: dict) -> str:
+    """Return deterministic @id; never null. Uses _content_hash fallback."""
+    eid = entity.get("@id")
+    if eid and isinstance(eid, str):
+        return eid
+    return f"{LEGACY_ID_PREFIX}{_content_hash(entity)}"
+
+
+def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict], int]:
+    """Apply linking logic to a family. Mutates when not dry_run. Returns (proposed_links, links_created).
+
+    Dry-run proposed_links is a 1:1 mirror of what would be written: every pointer including
+    symmetric back-links (e.g., Head->Spouse, Head->Boarder). IDs use _resolve_entity_id.
+    """
+    proposed: list[dict] = []
+    links_created = 0
+    head = next(
+        (e for e in family if (e.get("censusRelationshipToHead") or "").strip().lower() == "head"),
+        None,
+    )
+    if not head:
+        return (proposed, links_created)
+    head_id = _resolve_entity_id(head)
+
+    for entity in family:
+        if entity is head:
+            continue
+        member_id = _resolve_entity_id(entity)
+        rel_raw = (entity.get("censusRelationshipToHead") or "").strip()
+        rel_lower = rel_raw.lower()
+
+        if rel_lower in ("wife", "husband"):
+            spouse_member_needs = not _relation_contains_id(entity, "spouse", head_id)
+            spouse_head_needs = not _relation_contains_id(head, "spouse", member_id)
+            if spouse_member_needs:
+                proposed.append({
+                    "from_id": member_id,
+                    "to_id": head_id,
+                    "link_type": "spouse",
+                    "relationshipDescription": rel_raw,
+                })
+            if spouse_head_needs:
+                proposed.append({
+                    "from_id": head_id,
+                    "to_id": member_id,
+                    "link_type": "spouse",
+                    "relationshipDescription": rel_raw,
+                })
+            if not dry_run:
+                spouse_link = {"@id": head_id, "relationshipDescription": rel_raw}
+                spouse_back = {"@id": member_id, "relationshipDescription": rel_raw}
+                if _add_to_relation(entity, "spouse", spouse_link):
+                    links_created += 1
+                if _add_to_relation(head, "spouse", spouse_back):
+                    links_created += 1
+        elif rel_lower in ("son", "daughter"):
+            parent_needs = not _relation_contains_id(entity, "parent", head_id)
+            if parent_needs:
+                proposed.append({
+                    "from_id": member_id,
+                    "to_id": head_id,
+                    "link_type": "parent",
+                    "relationshipDescription": rel_raw,
+                })
+            if not dry_run:
+                if _add_to_relation(entity, "parent", {"@id": head_id, "relationshipDescription": rel_raw}):
+                    links_created += 1
+        elif rel_lower in ("boarder", "servant", "employee", "cook"):
+            moh_needs = not _relation_contains_id(entity, "memberOfHousehold", head_id)
+            knows_member_needs = not _relation_contains_id(entity, "knows", head_id)
+            knows_head_needs = not _relation_contains_id(head, "knows", member_id)
+            if moh_needs:
+                proposed.append({
+                    "from_id": member_id,
+                    "to_id": head_id,
+                    "link_type": "memberOfHousehold",
+                    "relationshipDescription": rel_raw,
+                })
+            if knows_member_needs:
+                proposed.append({
+                    "from_id": member_id,
+                    "to_id": head_id,
+                    "link_type": "knows",
+                    "relationshipDescription": rel_raw,
+                })
+            if knows_head_needs:
+                proposed.append({
+                    "from_id": head_id,
+                    "to_id": member_id,
+                    "link_type": "knows",
+                    "relationshipDescription": rel_raw,
+                })
+            if not dry_run:
+                moh_val = {"@id": head_id, "relationshipDescription": rel_raw}
+                knows_head = {"@id": head_id, "relationshipDescription": rel_raw}
+                knows_member = {"@id": member_id, "relationshipDescription": rel_raw}
+                if _add_to_relation(entity, "memberOfHousehold", moh_val):
+                    links_created += 1
+                if _add_to_relation(entity, "knows", knows_head):
+                    links_created += 1
+                if _add_to_relation(head, "knows", knows_member):
+                    links_created += 1
+    return (proposed, links_created)
 
 
 def _content_hash(entity: dict) -> str:
@@ -271,3 +465,59 @@ class JSONLDStore:
                     seen_ids.add(eid)
                     results.append(e)
         return results
+
+    def search_by_dwelling(self, dwelling_number: int) -> list[dict]:
+        """Return all entities in the given dwelling_number (physical building).
+
+        Primary method for 'Mapping the Block' and multi-family analysis —
+        returns everyone in the same physical structure regardless of family unit.
+        Handles multi-family dwellings (e.g. two families sharing one building).
+
+        Raises ValueError if dwelling_number < 1 (single source of truth).
+        """
+        if dwelling_number < 1:
+            raise ValueError("dwelling_number must be >= 1")
+        with self._lock:
+            entities = self._load_graph()
+            return [e for e in entities if e.get("censusDwellingNumber") == dwelling_number]
+
+    def link_dwelling(
+        self, dwelling_number: int, dry_run: bool = False
+    ) -> LinkResult | DryRunResult:
+        """Single, atomic entry point for building household relationships in the Knowledge Graph.
+
+        Loads the graph once, links all families in the dwelling in memory, then saves once.
+        Multi-family dwellings are updated atomically (all-or-nothing).
+        Dry-run path returns DryRunResult with proposed_links and families (always present).
+        """
+        if dwelling_number < 1:
+            raise ValueError("dwelling_number must be >= 1")
+        with self._lock:
+            entities = self._load_graph()
+            residents = [e for e in entities if e.get("censusDwellingNumber") == dwelling_number]
+            if not residents:
+                return {"proposed_links": [], "families": 0} if dry_run else {"processed_entities": [], "links_created": 0}
+            by_family: defaultdict[int, list[dict]] = defaultdict(list)
+            for r in residents:
+                fn = r.get("censusFamilyNumber")
+                if fn is not None and fn >= 1:
+                    by_family[fn].append(r)
+                else:
+                    name = " ".join(filter(None, [r.get("givenName"), r.get("familyName")])) or r.get("name", "?")
+                    logger.warning(
+                        "Resident excluded from linking: censusFamilyNumber invalid (name=%s, fn=%s)",
+                        name,
+                        fn,
+                    )
+            all_proposed: list[dict] = []
+            total_links = 0
+            for family_number, family_entities in sorted(by_family.items()):
+                proposed, count = _process_family_links(family_entities, dry_run)
+                for link in proposed:
+                    all_proposed.append({**link, "family_number": family_number})
+                total_links += count
+            if dry_run:
+                return {"proposed_links": all_proposed, "families": len(by_family)}
+            if total_links > 0:
+                self._save_graph(entities)
+            return {"processed_entities": residents, "links_created": total_links}

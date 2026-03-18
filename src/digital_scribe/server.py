@@ -195,3 +195,67 @@ def cross_reference_resident(
             "message": "CRITICAL: The knowledge archive is corrupt. Recall halted to prevent data loss.",
         }
     return {"count": len(results), "residents": results}
+
+
+@mcp.tool()
+def search_by_dwelling(dwelling_number: int) -> dict[str, Any]:
+    """Search for all residents in a dwelling (physical building).
+
+    'Mapping the Block' narrative: returns everyone in the same physical
+    structure regardless of family unit. Handles multi-family dwellings
+    (e.g. two families sharing one building).
+    """
+    try:
+        results = _get_knowledge_store().search_by_dwelling(dwelling_number)
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+    except ArchiveCorruptionError:
+        return {
+            "status": "error",
+            "message": "CRITICAL: The knowledge archive is corrupt. Search halted.",
+        }
+    return {"count": len(results), "residents": results}
+
+
+@mcp.tool()
+def link_household_relationships(dwelling_number: int, dry_run: bool = False) -> dict[str, Any]:
+    """Create semantic links between household members in a dwelling.
+
+    Atomically links all families: load once, link in memory, save once.
+    Groups by family_number (handles multiple heads in one dwelling).
+    - Nuclear: Wife->spouse, Son/Daughter->parent
+    - Extended: Boarder/Servant/Employee/Cook->memberOfHousehold + knows
+
+    Dry Run: Returns proposed links without writing. Use to verify the graph
+    before committing.
+    """
+    try:
+        store = _get_knowledge_store()
+        if dry_run:
+            result = store.link_dwelling(dwelling_number, dry_run=True)
+            return {
+                "status": "dry_run",
+                "dwelling_number": dwelling_number,
+                "families": result.get("families", 0),
+                "proposed_links": result["proposed_links"],
+            }
+        result = store.link_dwelling(dwelling_number, dry_run=False)
+        processed = result["processed_entities"]
+        if not processed:
+            return {"status": "no_residents", "dwelling_number": dwelling_number}
+        links_created = result["links_created"]
+        family_count = len({fn for e in processed if (fn := e.get("censusFamilyNumber")) and fn >= 1})
+        status = "linked" if links_created > 0 else "no_links_created"
+        return {
+            "status": status,
+            "dwelling_number": dwelling_number,
+            "families": family_count,
+            "links_created": links_created,
+        }
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
+    except ArchiveCorruptionError:
+        return {
+            "status": "error",
+            "message": "CRITICAL: The knowledge archive is corrupt. Linking halted.",
+        }
