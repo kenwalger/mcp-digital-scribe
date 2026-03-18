@@ -90,8 +90,20 @@ def _add_to_relation(entity: dict, property_name: str, value: dict) -> bool:
     return False
 
 
+def _resolve_entity_id(entity: dict) -> str:
+    """Return deterministic @id; never null. Uses _content_hash fallback."""
+    eid = entity.get("@id")
+    if eid and isinstance(eid, str):
+        return eid
+    return f"{LEGACY_ID_PREFIX}{_content_hash(entity)}"
+
+
 def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict], int]:
-    """Apply linking logic to a family. Mutates when not dry_run. Returns (proposed_links, links_created)."""
+    """Apply linking logic to a family. Mutates when not dry_run. Returns (proposed_links, links_created).
+
+    Dry-run proposed_links is a 1:1 mirror of what would be written: every pointer including
+    symmetric back-links (e.g., Head->Spouse, Head->Boarder). IDs use _resolve_entity_id.
+    """
     proposed: list[dict] = []
     links_created = 0
     head = next(
@@ -100,14 +112,12 @@ def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict]
     )
     if not head:
         return (proposed, links_created)
-    head_id = head.get("@id")
-    if not head_id:
-        return (proposed, links_created)
+    head_id = _resolve_entity_id(head)
 
     for entity in family:
         if entity is head:
             continue
-        member_id = entity.get("@id")
+        member_id = _resolve_entity_id(entity)
         rel_raw = (entity.get("censusRelationshipToHead") or "").strip()
         rel_lower = rel_raw.lower()
 
@@ -115,6 +125,12 @@ def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict]
             proposed.append({
                 "from_id": member_id,
                 "to_id": head_id,
+                "link_type": "spouse",
+                "relationshipDescription": rel_raw,
+            })
+            proposed.append({
+                "from_id": head_id,
+                "to_id": member_id,
                 "link_type": "spouse",
                 "relationshipDescription": rel_raw,
             })
@@ -140,6 +156,18 @@ def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict]
                 "from_id": member_id,
                 "to_id": head_id,
                 "link_type": "memberOfHousehold",
+                "relationshipDescription": rel_raw,
+            })
+            proposed.append({
+                "from_id": member_id,
+                "to_id": head_id,
+                "link_type": "knows",
+                "relationshipDescription": rel_raw,
+            })
+            proposed.append({
+                "from_id": head_id,
+                "to_id": member_id,
+                "link_type": "knows",
                 "relationshipDescription": rel_raw,
             })
             if not dry_run:
@@ -432,6 +460,13 @@ class JSONLDStore:
                 fn = r.get("censusFamilyNumber")
                 if fn is not None and fn >= 1:
                     by_family[fn].append(r)
+                else:
+                    name = " ".join(filter(None, [r.get("givenName"), r.get("familyName")])) or r.get("name", "?")
+                    logger.warning(
+                        "Resident excluded from linking: censusFamilyNumber invalid (name=%s, fn=%s)",
+                        name,
+                        fn,
+                    )
             all_proposed: list[dict] = []
             total_links = 0
             for family_number, family_entities in sorted(by_family.items()):

@@ -258,6 +258,39 @@ def test_multi_relation_household() -> None:
     assert _moh_head_id(boarder2) == head_id
 
 
+def test_dry_run_symmetry() -> None:
+    """Proposed links includes symmetric back-links (e.g., Head->Wife and Wife->Head)."""
+    ingest_resident({
+        "dwelling_number": 11,
+        "family_number": 7,
+        "name": "Husband Test",
+        "relationship_to_head": "Head",
+        "marital_status": "Married",
+        "occupation": "Farmer",
+        "birthplace": "Ohio",
+        "handwriting_confidence": 0.9,
+    })
+    ingest_resident({
+        "dwelling_number": 11,
+        "family_number": 7,
+        "name": "Wife Test",
+        "relationship_to_head": "Wife",
+        "marital_status": "Married",
+        "occupation": "Keeping House",
+        "birthplace": "Pennsylvania",
+        "handwriting_confidence": 0.92,
+    })
+    result = link_household_relationships(dwelling_number=11, dry_run=True)
+    assert result.get("status") == "dry_run"
+    proposed = result.get("proposed_links", [])
+    spouse_links = [p for p in proposed if p.get("link_type") == "spouse"]
+    assert len(spouse_links) == 2, "Husband/Wife pair must produce two spouse links (forward + back)"
+    from_ids = {p["from_id"] for p in spouse_links}
+    to_ids = {p["to_id"] for p in spouse_links}
+    assert len(from_ids) == 2 and len(to_ids) == 2
+    assert from_ids == to_ids, "Symmetric: from_ids and to_ids must be the same set"
+
+
 def test_link_household_dry_run() -> None:
     """Dry run returns proposed links but does NOT modify the archive on disk."""
     record = {

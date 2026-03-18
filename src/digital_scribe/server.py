@@ -229,14 +229,15 @@ def link_household_relationships(dwelling_number: int, dry_run: bool = False) ->
     """
     store = _get_knowledge_store()
     try:
-        result = store.link_dwelling(dwelling_number, dry_run=dry_run)
-        if "proposed_links" in result:
+        if dry_run:
+            result = store.link_dwelling(dwelling_number, dry_run=True)
             return {
                 "status": "dry_run",
                 "dwelling_number": dwelling_number,
                 "families": result.get("families", 0),
                 "proposed_links": result["proposed_links"],
             }
+        result = store.link_dwelling(dwelling_number, dry_run=False)
         processed = result["processed_entities"]
         if not processed:
             return {"status": "no_residents", "dwelling_number": dwelling_number}
