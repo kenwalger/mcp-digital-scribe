@@ -406,44 +406,15 @@ class JSONLDStore:
             entities = self._load_graph()
             return [e for e in entities if e.get("censusDwellingNumber") == dwelling_number]
 
-    def link_household(
-        self, entity_ids: list[str], dry_run: bool = False
-    ) -> LinkResult | DryRunResult:
-        """Create semantic links between household members based on census relationship.
-
-        Nuclear Family:
-        - Wife -> spouse link to Head; relationshipDescription preserves census term.
-        - Son/Daughter -> parent link to Head; relationshipDescription preserves census term.
-
-        Extended Household (Boarders, Servants, Employees, Cooks):
-        - memberOfHousehold (links to Head's @id) + schema:knows link.
-        - relationshipDescription preserves original census term (e.g. 'Boarder').
-
-        Args:
-            entity_ids: @id values of entities in the household (same family_number).
-            dry_run: If True, return proposed links without writing to disk.
-
-        Returns:
-            LinkResult (modified_entities, links_created) or DryRunResult (proposed_links).
-        """
-        if not entity_ids:
-            return {"proposed_links": []} if dry_run else {"modified_entities": [], "links_created": 0}
-        id_set = set(entity_ids)
-        with self._lock:
-            entities = self._load_graph()
-            family = [e for e in entities if e.get("@id") in id_set]
-            if not family:
-                return {"proposed_links": []} if dry_run else {"modified_entities": [], "links_created": 0}
-            proposed, links_created = _process_family_links(family, dry_run)
-            if dry_run:
-                return {"proposed_links": proposed}
-            self._save_graph(entities)
-        return {"modified_entities": family, "links_created": links_created}
-
     def link_dwelling(
         self, dwelling_number: int, dry_run: bool = False
     ) -> LinkResult | DryRunResult:
-        """Atomically link all families in a dwelling. Load once, link in memory, save once."""
+        """Single, atomic entry point for building household relationships in the Knowledge Graph.
+
+        Loads the graph once, links all families in the dwelling in memory, then saves once.
+        Multi-family dwellings are updated atomically (all-or-nothing).
+        Dry-run path returns DryRunResult with proposed_links and families (always present).
+        """
         if dwelling_number < 1:
             raise ValueError("dwelling_number must be >= 1")
         with self._lock:

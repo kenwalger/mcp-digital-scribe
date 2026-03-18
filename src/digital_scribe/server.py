@@ -240,14 +240,13 @@ def link_household_relationships(dwelling_number: int, dry_run: bool = False) ->
         modified = result["modified_entities"]
         if not modified:
             return {"status": "no_residents", "dwelling_number": dwelling_number}
+        family_count = len({e.get("censusFamilyNumber") for e in modified if e.get("censusFamilyNumber")})
         return {
             "status": "linked",
             "dwelling_number": dwelling_number,
-            "families": len({e.get("censusFamilyNumber") for e in modified}),
+            "families": family_count,
             "residents_linked": result["links_created"],
         }
-    except ValueError:
-        raise
     except ArchiveCorruptionError:
         return {
             "status": "error",

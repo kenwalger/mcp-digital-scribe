@@ -13,7 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **test_link_household_dry_run**: Verifies dry run returns proposed links and leaves archive unchanged (hash comparison)
 - **test_search_by_dwelling_tool**: Verifies dwelling_number < 1 raises ValueError
 - **test_multi_relation_household**: Head + Wife + two Boarders; verifies symmetric spouse, Head knows both boarders, no data overwritten
-- **Social Graph (Extended Household)**: `link_household` in `knowledge_store.py` — Nuclear: Wife→spouse, Son/Daughter→parent to Head. Extended: Boarder/Servant/Employee/Cook→`memberOfHousehold` + `schema:knows` to Head. All links include `relationshipDescription` to preserve census term
+- **Social Graph (Extended Household)**: `link_dwelling` in `knowledge_store.py` — Nuclear: Wife→spouse, Son/Daughter→parent to Head. Extended: Boarder/Servant/Employee/Cook→`memberOfHousehold` + `schema:knows` to Head. All links include `relationshipDescription` to preserve census term
 - **search_by_dwelling**: Returns all residents in a dwelling (physical building); critical for "Mapping the Block" / multi-family dwellings
 - **link_household_relationships tool**: MCP tool groups by `family_number` (handles multiple heads in one dwelling), links households. Dry Run mode returns proposed links without writing
 - **test_social_graph_links**: Ingest Head (Farmer) + Boarder (Blacksmith), link household, verify Blacksmith has `memberOfHousehold` to Farmer
@@ -22,11 +22,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **README**: New "Social Graph (Non-Nuclear Relationships)" section — models extended household as graph, not just genealogy
 - **_add_to_relation**: Returns bool (True if added); used for accurate link counting; memberOfHousehold now uses it
-- **link_household**: Returns LinkResult/DryRunResult (type-safe); uses _process_family_links helper
-- **link_dwelling**: Atomic linking — load once, link all families in memory, save once
-- **link_household_relationships**: Calls link_dwelling; no isinstance dispatch
+- **link_dwelling**: Single atomic entry point; docstring clarified; DryRunResult always includes families
+- **link_household_relationships**: Honest family count via filtered set; removed redundant ValueError catch
 - **search_by_dwelling**: dwelling_number < 1 validation moved into store (single source of truth); server lets ValueError propagate
 - **test_link_household_dry_run**: Uses `with open(...) as f` for file operations
+
+### Removed
+
+- **link_household**: Dead code; link_dwelling is sole entry point
 
 ### Fixed
 
