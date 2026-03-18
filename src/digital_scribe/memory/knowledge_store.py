@@ -51,6 +51,24 @@ def _ensure_relation_dict(item: str | dict) -> dict:
     return {"@id": item} if isinstance(item, str) else {"@id": str(item)}
 
 
+def _relation_contains_id(entity: dict, property_name: str, target_id: str) -> bool:
+    """Check if entity already has target_id in the relation property (read-only)."""
+    existing = entity.get(property_name)
+    if existing is None:
+        return False
+    if isinstance(existing, str):
+        return existing == target_id
+    if isinstance(existing, dict):
+        return existing.get("@id") == target_id
+    if isinstance(existing, list):
+        for item in existing:
+            if isinstance(item, dict) and item.get("@id") == target_id:
+                return True
+            if item == target_id:
+                return True
+    return False
+
+
 def _add_to_relation(entity: dict, property_name: str, value: dict) -> bool:
     """Append a relation value without overwriting existing entries.
 
@@ -131,18 +149,22 @@ def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict]
         rel_lower = rel_raw.lower()
 
         if rel_lower in ("wife", "husband"):
-            proposed.append({
-                "from_id": member_id,
-                "to_id": head_id,
-                "link_type": "spouse",
-                "relationshipDescription": rel_raw,
-            })
-            proposed.append({
-                "from_id": head_id,
-                "to_id": member_id,
-                "link_type": "spouse",
-                "relationshipDescription": rel_raw,
-            })
+            spouse_member_needs = not _relation_contains_id(entity, "spouse", head_id)
+            spouse_head_needs = not _relation_contains_id(head, "spouse", member_id)
+            if spouse_member_needs:
+                proposed.append({
+                    "from_id": member_id,
+                    "to_id": head_id,
+                    "link_type": "spouse",
+                    "relationshipDescription": rel_raw,
+                })
+            if spouse_head_needs:
+                proposed.append({
+                    "from_id": head_id,
+                    "to_id": member_id,
+                    "link_type": "spouse",
+                    "relationshipDescription": rel_raw,
+                })
             if not dry_run:
                 spouse_link = {"@id": head_id, "relationshipDescription": rel_raw}
                 spouse_back = {"@id": member_id, "relationshipDescription": rel_raw}
@@ -151,34 +173,42 @@ def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict]
                 if _add_to_relation(head, "spouse", spouse_back):
                     links_created += 1
         elif rel_lower in ("son", "daughter"):
-            proposed.append({
-                "from_id": member_id,
-                "to_id": head_id,
-                "link_type": "parent",
-                "relationshipDescription": rel_raw,
-            })
+            parent_needs = not _relation_contains_id(entity, "parent", head_id)
+            if parent_needs:
+                proposed.append({
+                    "from_id": member_id,
+                    "to_id": head_id,
+                    "link_type": "parent",
+                    "relationshipDescription": rel_raw,
+                })
             if not dry_run:
                 if _add_to_relation(entity, "parent", {"@id": head_id, "relationshipDescription": rel_raw}):
                     links_created += 1
         elif rel_lower in ("boarder", "servant", "employee", "cook"):
-            proposed.append({
-                "from_id": member_id,
-                "to_id": head_id,
-                "link_type": "memberOfHousehold",
-                "relationshipDescription": rel_raw,
-            })
-            proposed.append({
-                "from_id": member_id,
-                "to_id": head_id,
-                "link_type": "knows",
-                "relationshipDescription": rel_raw,
-            })
-            proposed.append({
-                "from_id": head_id,
-                "to_id": member_id,
-                "link_type": "knows",
-                "relationshipDescription": rel_raw,
-            })
+            moh_needs = not _relation_contains_id(entity, "memberOfHousehold", head_id)
+            knows_member_needs = not _relation_contains_id(entity, "knows", head_id)
+            knows_head_needs = not _relation_contains_id(head, "knows", member_id)
+            if moh_needs:
+                proposed.append({
+                    "from_id": member_id,
+                    "to_id": head_id,
+                    "link_type": "memberOfHousehold",
+                    "relationshipDescription": rel_raw,
+                })
+            if knows_member_needs:
+                proposed.append({
+                    "from_id": member_id,
+                    "to_id": head_id,
+                    "link_type": "knows",
+                    "relationshipDescription": rel_raw,
+                })
+            if knows_head_needs:
+                proposed.append({
+                    "from_id": head_id,
+                    "to_id": member_id,
+                    "link_type": "knows",
+                    "relationshipDescription": rel_raw,
+                })
             if not dry_run:
                 moh_val = {"@id": head_id, "relationshipDescription": rel_raw}
                 knows_head = {"@id": head_id, "relationshipDescription": rel_raw}
@@ -488,5 +518,6 @@ class JSONLDStore:
                 total_links += count
             if dry_run:
                 return {"proposed_links": all_proposed, "families": len(by_family)}
-            self._save_graph(entities)
+            if total_links > 0:
+                self._save_graph(entities)
             return {"processed_entities": residents, "links_created": total_links}

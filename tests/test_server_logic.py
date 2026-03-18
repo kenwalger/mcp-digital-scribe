@@ -425,6 +425,38 @@ def test_relation_promotion() -> None:
     assert "urn:uuid:boarder2" in ids
 
 
+def test_link_dwelling_idempotency() -> None:
+    """Second link call on same dwelling returns links_created=0 and no_links_created."""
+    dwelling = 13
+    ingest_resident({
+        "dwelling_number": dwelling,
+        "family_number": 7,
+        "name": "Ida Idempotent",
+        "relationship_to_head": "Head",
+        "marital_status": "Married",
+        "occupation": "Clerk",
+        "birthplace": "Ohio",
+        "handwriting_confidence": 0.9,
+    })
+    ingest_resident({
+        "dwelling_number": dwelling,
+        "family_number": 7,
+        "name": "Ivan Idempotent",
+        "relationship_to_head": "Wife",
+        "marital_status": "Married",
+        "occupation": "Keeping House",
+        "birthplace": "Pennsylvania",
+        "handwriting_confidence": 0.92,
+    })
+    first = link_household_relationships(dwelling_number=dwelling, dry_run=False)
+    assert first.get("status") == "linked"
+    assert first.get("links_created", 0) > 0
+
+    second = link_household_relationships(dwelling_number=dwelling, dry_run=False)
+    assert second.get("status") == "no_links_created"
+    assert second.get("links_created", -1) == 0
+
+
 def test_link_multi_family_dwelling_atomicity() -> None:
     """Two families in one dwelling; both linked correctly in a single tool call."""
     dwelling = 10

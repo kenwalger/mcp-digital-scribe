@@ -170,6 +170,14 @@ async def main() -> None:
                         if links_info:
                             line += " [" + "; ".join(links_info) + "]"
                         print(line)
+                # Idempotency: second call on same dwelling creates no new links
+                link2_result = await session.call_tool(
+                    "link_household_relationships",
+                    arguments={"dwelling_number": dwelling_num},
+                )
+                link2_data = _extract_record_from_result(link2_result)
+                if link2_data and link2_data.get("status") == "no_links_created" and link2_data.get("links_created", -1) == 0:
+                    print("  (idempotent run: 0 new links)")
             elif link_data and link_data.get("status") == "error":
                 print(f"\nSocial Graph: {link_data.get('message', 'Unknown error')}", file=sys.stderr)
 

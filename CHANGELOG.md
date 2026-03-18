@@ -9,12 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **test_link_dwelling_idempotency**: Second link call on same dwelling returns links_created=0 and no_links_created
 - **test_spouse_husband_relationship**: Verifies female Head + Husband get symmetric spouse links (gender-neutral logic)
 - **test_relation_promotion**: Verifies bare string @id in relation field promoted to dict when second relationship added
 - **Social Graph demo**: memory_test calls search_by_dwelling after link_household_relationships; displays actual Spouse/Parent/Knows/MemberOfHousehold links from fresh data
 
 ### Changed
 
+- **_process_family_links (dry-run)**: Only propose links that do NOT exist in spouse/parent/memberOfHousehold/knows; 1:1 mirror of actual writes
+- **link_dwelling**: Conditional save — _save_graph only when links_created > 0; no write on idempotent run
+- **memory_test**: Second link call demonstrates idempotency (0 new links)
 - **_add_to_relation**: String (bare @id) normalized to {"@id": val} before list; ensures property always list of dicts, never mix
 - **_process_family_links**: Spouse detection now includes "husband" (gender-neutral; wife and husband both link)
 - **link_household_relationships**: family_count filter uses `fn >= 1` to match store linking logic; excludes negative numbers
