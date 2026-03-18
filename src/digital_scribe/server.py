@@ -235,47 +235,47 @@ def link_household_relationships(dwelling_number: int, dry_run: bool = False) ->
     store = _get_knowledge_store()
     try:
         residents = store.search_by_dwelling(dwelling_number)
+        if not residents:
+            return {"status": "no_residents", "dwelling_number": dwelling_number}
+
+        by_family: defaultdict[int, list[dict]] = defaultdict(list)
+        for r in residents:
+            fn = r.get("censusFamilyNumber")
+            if fn is not None and fn >= 1:
+                by_family[fn].append(r)
+
+        if dry_run:
+            all_proposed: list[dict] = []
+            for family_number, family_entities in sorted(by_family.items()):
+                ids = [e.get("@id") for e in family_entities if e.get("@id")]
+                if not ids:
+                    continue
+                result = store.link_household(ids, dry_run=True)
+                if isinstance(result, dict) and "proposed_links" in result:
+                    for link in result["proposed_links"]:
+                        link["family_number"] = family_number
+                        all_proposed.append(link)
+            return {
+                "status": "dry_run",
+                "dwelling_number": dwelling_number,
+                "families": len(by_family),
+                "proposed_links": all_proposed,
+            }
+
+        linked_count = 0
+        for family_entities in by_family.values():
+            ids = [e.get("@id") for e in family_entities if e.get("@id")]
+            if ids:
+                store.link_household(ids)
+                linked_count += len(family_entities)
+        return {
+            "status": "linked",
+            "dwelling_number": dwelling_number,
+            "families": len(by_family),
+            "residents_linked": linked_count,
+        }
     except ArchiveCorruptionError:
         return {
             "status": "error",
             "message": "CRITICAL: The knowledge archive is corrupt. Linking halted.",
         }
-    if not residents:
-        return {"status": "no_residents", "dwelling_number": dwelling_number}
-
-    by_family: defaultdict[int, list[dict]] = defaultdict(list)
-    for r in residents:
-        fn = r.get("censusFamilyNumber")
-        if fn is not None and fn >= 1:
-            by_family[fn].append(r)
-
-    if dry_run:
-        all_proposed: list[dict] = []
-        for family_number, family_entities in sorted(by_family.items()):
-            ids = [e.get("@id") for e in family_entities if e.get("@id")]
-            if not ids:
-                continue
-            result = store.link_household(ids, dry_run=True)
-            if isinstance(result, dict) and "proposed_links" in result:
-                for link in result["proposed_links"]:
-                    link["family_number"] = family_number
-                    all_proposed.append(link)
-        return {
-            "status": "dry_run",
-            "dwelling_number": dwelling_number,
-            "families": len(by_family),
-            "proposed_links": all_proposed,
-        }
-
-    linked_count = 0
-    for family_entities in by_family.values():
-        ids = [e.get("@id") for e in family_entities if e.get("@id")]
-        if ids:
-            store.link_household(ids)
-            linked_count += len(family_entities)
-    return {
-        "status": "linked",
-        "dwelling_number": dwelling_number,
-        "families": len(by_family),
-        "residents_linked": linked_count,
-    }

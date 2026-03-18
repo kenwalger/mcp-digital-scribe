@@ -134,3 +134,114 @@ def test_social_graph_links() -> None:
     assert farmer is not None
     assert member_of.get("@id") == farmer.get("@id")
     assert member_of.get("relationshipDescription") == "Boarder"
+
+
+def test_multi_relation_household() -> None:
+    """Ingest Head, Wife, two Boarders; verify symmetric spouse, Head knows both, no data loss."""
+    head_record = {
+        "dwelling_number": 7,
+        "family_number": 4,
+        "name": "George Head",
+        "relationship_to_head": "Head",
+        "marital_status": "Married",
+        "occupation": "Farmer",
+        "birthplace": "Ohio",
+        "handwriting_confidence": 0.9,
+    }
+    wife_record = {
+        "dwelling_number": 7,
+        "family_number": 4,
+        "name": "Martha Head",
+        "relationship_to_head": "Wife",
+        "marital_status": "Married",
+        "occupation": "Keeping House",
+        "birthplace": "Pennsylvania",
+        "handwriting_confidence": 0.92,
+    }
+    boarder1_record = {
+        "dwelling_number": 7,
+        "family_number": 4,
+        "name": "Joe Boarder",
+        "relationship_to_head": "Boarder",
+        "marital_status": "Single",
+        "occupation": "Laborer",
+        "birthplace": "Ireland",
+        "handwriting_confidence": 0.85,
+    }
+    boarder2_record = {
+        "dwelling_number": 7,
+        "family_number": 4,
+        "name": "Kate Boarder",
+        "relationship_to_head": "Boarder",
+        "marital_status": "Single",
+        "occupation": "Servant",
+        "birthplace": "Germany",
+        "handwriting_confidence": 0.88,
+    }
+    ingest_resident(head_record)
+    ingest_resident(wife_record)
+    ingest_resident(boarder1_record)
+    ingest_resident(boarder2_record)
+
+    result = link_household_relationships(dwelling_number=7, dry_run=False)
+    assert result.get("status") == "linked"
+    assert result.get("families") == 1
+    assert result.get("residents_linked") == 4
+
+    recall = cross_reference_resident(family_number=4)
+    residents = recall.get("residents", [])
+    head = next(
+        (r for r in residents if (r.get("hasOccupation", {}).get("name") == "Farmer")),
+        None,
+    )
+    wife = next(
+        (r for r in residents if (r.get("givenName") == "Martha" and r.get("familyName") == "Head")),
+        None,
+    )
+    boarder1 = next(
+        (r for r in residents if (r.get("givenName") == "Joe" and r.get("familyName") == "Boarder")),
+        None,
+    )
+    boarder2 = next(
+        (r for r in residents if (r.get("givenName") == "Kate" and r.get("familyName") == "Boarder")),
+        None,
+    )
+    assert head is not None
+    assert wife is not None
+    assert boarder1 is not None
+    assert boarder2 is not None
+
+    head_id = head.get("@id")
+    wife_id = wife.get("@id")
+
+    def _spouse_refs(person: dict) -> list[dict]:
+        s = person.get("spouse")
+        if s is None:
+            return []
+        if isinstance(s, list):
+            return [x for x in s if isinstance(x, dict) and x.get("@id")]
+        return [s] if isinstance(s, dict) and s.get("@id") else []
+
+    head_spouses = _spouse_refs(head)
+    wife_spouses = _spouse_refs(wife)
+    assert any(s.get("@id") == wife_id for s in head_spouses), "Head must have spouse link to Wife"
+    assert any(s.get("@id") == head_id for s in wife_spouses), "Wife must have spouse link to Head"
+
+    def _knows_ids(person: dict) -> list[str]:
+        k = person.get("knows")
+        if k is None:
+            return []
+        if isinstance(k, list):
+            return [
+                x.get("@id") for x in k
+                if isinstance(x, dict) and x.get("@id")
+            ]
+        return [k.get("@id")] if isinstance(k, dict) and k.get("@id") else []
+
+    head_knows = _knows_ids(head)
+    assert boarder1.get("@id") in head_knows, "Head must know Boarder1"
+    assert boarder2.get("@id") in head_knows, "Head must know Boarder2"
+    assert len(head_knows) == 2, "Head has exactly two knows entries (both Boarders, no overwrite)"
+
+    assert boarder1.get("memberOfHousehold", {}).get("@id") == head_id
+    assert boarder2.get("memberOfHousehold", {}).get("@id") == head_id

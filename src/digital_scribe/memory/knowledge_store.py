@@ -28,6 +28,44 @@ class ArchiveCorruptionError(RuntimeError):
     """
 
 
+def _add_to_relation(entity: dict, property_name: str, value: dict) -> None:
+    """Append a relation value without overwriting existing entries.
+
+    If entity[property_name] does not exist, sets it to [value].
+    If it is a single string/dict, converts to list with [old, value].
+    If already a list, appends value only if not already present (deduplication by @id).
+    """
+    target_id = value.get("@id") if isinstance(value, dict) else None
+    if not target_id:
+        return
+
+    existing = entity.get(property_name)
+    if existing is None:
+        entity[property_name] = [value]
+        return
+
+    if isinstance(existing, dict):
+        if existing.get("@id") == target_id:
+            return
+        entity[property_name] = [existing, value]
+        return
+
+    if isinstance(existing, str):
+        if existing == target_id:
+            return
+        entity[property_name] = [existing, value]
+        return
+
+    if isinstance(existing, list):
+        for item in existing:
+            if isinstance(item, dict) and item.get("@id") == target_id:
+                return
+            if item == target_id:
+                return
+        existing.append(value)
+        return
+
+
 def _content_hash(entity: dict) -> str:
     """Deterministic content hash for legacy entity IDs (usedforsecurity=False for FIPS)."""
     return hashlib.md5(
@@ -341,7 +379,10 @@ class JSONLDStore:
                         "relationshipDescription": rel_raw,
                     })
                     if not dry_run:
-                        entity["spouse"] = {"@id": head_id, "relationshipDescription": rel_raw}
+                        spouse_link = {"@id": head_id, "relationshipDescription": rel_raw}
+                        spouse_back = {"@id": member_id, "relationshipDescription": rel_raw}
+                        _add_to_relation(entity, "spouse", spouse_link)
+                        _add_to_relation(head, "spouse", spouse_back)
                 elif rel_lower in ("son", "daughter"):
                     proposed.append({
                         "from_id": member_id,
@@ -350,15 +391,7 @@ class JSONLDStore:
                         "relationshipDescription": rel_raw,
                     })
                     if not dry_run:
-                        entity.setdefault("parent", [])
-                        parents = entity["parent"]
-                        if isinstance(parents, list):
-                            if not any(
-                                p.get("@id") == head_id for p in parents if isinstance(p, dict)
-                            ):
-                                parents.append({"@id": head_id, "relationshipDescription": rel_raw})
-                        else:
-                            entity["parent"] = [{"@id": head_id, "relationshipDescription": rel_raw}]
+                        _add_to_relation(entity, "parent", {"@id": head_id, "relationshipDescription": rel_raw})
                 elif rel_lower in ("boarder", "servant", "employee", "cook"):
                     proposed.append({
                         "from_id": member_id,
@@ -368,15 +401,8 @@ class JSONLDStore:
                     })
                     if not dry_run:
                         entity["memberOfHousehold"] = {"@id": head_id, "relationshipDescription": rel_raw}
-                        entity.setdefault("knows", [])
-                        knows = entity["knows"]
-                        if isinstance(knows, list):
-                            if not any(
-                                k.get("@id") == head_id for k in knows if isinstance(k, dict)
-                            ):
-                                knows.append({"@id": head_id})
-                        else:
-                            entity["knows"] = {"@id": head_id}
+                        _add_to_relation(entity, "knows", {"@id": head_id})
+                        _add_to_relation(head, "knows", {"@id": member_id})
 
             if dry_run:
                 return {"proposed_links": proposed}

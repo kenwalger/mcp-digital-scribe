@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **test_multi_relation_household**: Head + Wife + two Boarders; verifies symmetric spouse, Head knows both boarders, no data overwritten
 - **Social Graph (Extended Household)**: `link_household` in `knowledge_store.py` — Nuclear: Wife→spouse, Son/Daughter→parent to Head. Extended: Boarder/Servant/Employee/Cook→`memberOfHousehold` + `schema:knows` to Head. All links include `relationshipDescription` to preserve census term
 - **search_by_dwelling**: Returns all residents in a dwelling (physical building); critical for "Mapping the Block" / multi-family dwellings
 - **link_household_relationships tool**: MCP tool groups by `family_number` (handles multiple heads in one dwelling), links households. Dry Run mode returns proposed links without writing
@@ -17,6 +18,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **README**: New "Social Graph (Non-Nuclear Relationships)" section — models extended household as graph, not just genealogy
+- **_add_to_relation**: Private helper for reliable list appending — converts single values to list, deduplicates by @id
+- **link_household**: Symmetric spouse links (both Head and Wife point to each other); uses _add_to_relation for knows (fixes data-loss when adding Boarder after Servant)
+- **link_household_relationships**: Wrapped dry-run and write paths in try/except ArchiveCorruptionError; returns structured error on corrupt archive
+
+### Fixed
+
+- **knows data-loss**: Extended-household knows now uses _add_to_relation; no overwrite when multiple boarders/servants
 
 ### Added (prior)
 
