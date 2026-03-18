@@ -229,8 +229,8 @@ def link_household_relationships(dwelling_number: int, dry_run: bool = False) ->
     Dry Run: Returns proposed links without writing. Use to verify the graph
     before committing.
     """
-    store = _get_knowledge_store()
     try:
+        store = _get_knowledge_store()
         if dry_run:
             result = store.link_dwelling(dwelling_number, dry_run=True)
             return {
@@ -252,6 +252,8 @@ def link_household_relationships(dwelling_number: int, dry_run: bool = False) ->
             "families": family_count,
             "links_created": links_created,
         }
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
     except ArchiveCorruptionError:
         return {
             "status": "error",

@@ -358,9 +358,12 @@ def test_search_by_dwelling_tool() -> None:
 
 
 def test_link_invalid_dwelling_id() -> None:
-    """link_household_relationships raises ValueError for dwelling_number=0."""
-    with pytest.raises(ValueError, match="dwelling_number must be >= 1"):
-        link_household_relationships(dwelling_number=0)
+    """link_household_relationships returns structured error for dwelling_number < 1."""
+    for invalid in (0, -1):
+        result = link_household_relationships(dwelling_number=invalid)
+        assert result.get("status") == "error"
+        assert "message" in result
+        assert "dwelling_number" in result.get("message", "").lower()
 
 
 def test_link_multi_family_dwelling_atomicity() -> None:

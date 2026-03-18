@@ -9,6 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Social Graph demo**: memory_test calls search_by_dwelling after link_household_relationships; displays actual Spouse/Parent/Knows/MemberOfHousehold links from fresh data
+
+### Changed
+
+- **memory_test Social Graph**: Removed stale residents usage; post-linking search_by_dwelling now drives display of created links
+- **link_household_relationships**: try/except ValueError returns {"status": "error", "message": str(e)}; symmetric with search_by_dwelling
+- **test_link_invalid_dwelling_id**: Asserts structured error for dwelling_number < 1 (no longer expects raised ValueError)
+- **JSONLDStore.search_by_dwelling** docstring: Explicitly states primary method for 'Mapping the Block' and multi-family analysis
+
+### Added (prior)
+
 - **test_dry_run_symmetry**: Verifies proposed_links has two spouse entries for husband/wife (forward + back)
 - **test_link_invalid_dwelling_id**: link_household_relationships(dwelling_number=0) raises ValueError
 - **test_link_multi_family_dwelling_atomicity**: Two families in one dwelling; both linked in single call

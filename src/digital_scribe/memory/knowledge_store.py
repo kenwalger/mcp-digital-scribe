@@ -430,8 +430,9 @@ class JSONLDStore:
     def search_by_dwelling(self, dwelling_number: int) -> list[dict]:
         """Return all entities in the given dwelling_number (physical building).
 
-        Critical for 'Mapping the Block' — see everyone in the same physical
-        structure regardless of family unit. Handles multi-family dwellings.
+        Primary method for 'Mapping the Block' and multi-family analysis —
+        returns everyone in the same physical structure regardless of family unit.
+        Handles multi-family dwellings (e.g. two families sharing one building).
 
         Raises ValueError if dwelling_number < 1 (single source of truth).
         """
