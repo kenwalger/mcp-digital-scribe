@@ -237,15 +237,17 @@ def link_household_relationships(dwelling_number: int, dry_run: bool = False) ->
                 "families": result.get("families", 0),
                 "proposed_links": result["proposed_links"],
             }
-        modified = result["modified_entities"]
-        if not modified:
+        processed = result["processed_entities"]
+        if not processed:
             return {"status": "no_residents", "dwelling_number": dwelling_number}
-        family_count = len({e.get("censusFamilyNumber") for e in modified if e.get("censusFamilyNumber")})
+        links_created = result["links_created"]
+        family_count = len({e.get("censusFamilyNumber") for e in processed if e.get("censusFamilyNumber")})
+        status = "linked" if links_created > 0 else "no_links_created"
         return {
-            "status": "linked",
+            "status": status,
             "dwelling_number": dwelling_number,
             "families": family_count,
-            "residents_linked": result["links_created"],
+            "links_created": links_created,
         }
     except ArchiveCorruptionError:
         return {

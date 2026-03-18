@@ -118,7 +118,7 @@ def test_social_graph_links() -> None:
     result = link_household_relationships(dwelling_number=5, dry_run=False)
     assert result.get("status") == "linked"
     assert result.get("families") == 1
-    assert result.get("residents_linked") == 3
+    assert result.get("links_created") == 3
 
     recall = cross_reference_resident(family_number=3)
     residents = recall.get("residents", [])
@@ -191,7 +191,7 @@ def test_multi_relation_household() -> None:
     result = link_household_relationships(dwelling_number=7, dry_run=False)
     assert result.get("status") == "linked"
     assert result.get("families") == 1
-    assert result.get("residents_linked") == 8
+    assert result.get("links_created") == 8
 
     recall = cross_reference_resident(family_number=4)
     residents = recall.get("residents", [])
@@ -301,6 +301,12 @@ def test_search_by_dwelling_tool() -> None:
         search_by_dwelling(0)
     with pytest.raises(ValueError, match="dwelling_number must be >= 1"):
         search_by_dwelling(-1)
+
+
+def test_link_invalid_dwelling_id() -> None:
+    """link_household_relationships raises ValueError for dwelling_number=0."""
+    with pytest.raises(ValueError, match="dwelling_number must be >= 1"):
+        link_household_relationships(dwelling_number=0)
 
 
 def test_link_multi_family_dwelling_atomicity() -> None:

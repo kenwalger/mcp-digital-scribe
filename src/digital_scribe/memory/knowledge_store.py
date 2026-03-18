@@ -22,7 +22,7 @@ from digital_scribe.models.census_1880 import Census1880Record, DITTO_MARKS, DIT
 
 class LinkResult(TypedDict):
     """Type-safe result of household linking (write path)."""
-    modified_entities: list[dict]
+    processed_entities: list[dict]
     links_created: int
 
 
@@ -55,6 +55,11 @@ def _add_to_relation(entity: dict, property_name: str, value: dict) -> bool:
     """
     target_id = value.get("@id") if isinstance(value, dict) else None
     if not target_id:
+        logger.warning(
+            "_add_to_relation called with value missing @id: property=%s, value=%s",
+            property_name,
+            value,
+        )
         return False
 
     existing = entity.get(property_name)
@@ -421,7 +426,7 @@ class JSONLDStore:
             entities = self._load_graph()
             residents = [e for e in entities if e.get("censusDwellingNumber") == dwelling_number]
             if not residents:
-                return {"proposed_links": [], "families": 0} if dry_run else {"modified_entities": [], "links_created": 0}
+                return {"proposed_links": [], "families": 0} if dry_run else {"processed_entities": [], "links_created": 0}
             by_family: defaultdict[int, list[dict]] = defaultdict(list)
             for r in residents:
                 fn = r.get("censusFamilyNumber")
@@ -437,4 +442,4 @@ class JSONLDStore:
             if dry_run:
                 return {"proposed_links": all_proposed, "families": len(by_family)}
             self._save_graph(entities)
-        return {"modified_entities": residents, "links_created": total_links}
+        return {"processed_entities": residents, "links_created": total_links}

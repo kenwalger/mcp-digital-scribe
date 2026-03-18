@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **test_link_invalid_dwelling_id**: link_household_relationships(dwelling_number=0) raises ValueError
 - **test_link_multi_family_dwelling_atomicity**: Two families in one dwelling; both linked in single call
 - **test_link_household_dry_run**: Verifies dry run returns proposed links and leaves archive unchanged (hash comparison)
 - **test_search_by_dwelling_tool**: Verifies dwelling_number < 1 raises ValueError
@@ -21,9 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 
 - **README**: New "Social Graph (Non-Nuclear Relationships)" section — models extended household as graph, not just genealogy
-- **_add_to_relation**: Returns bool (True if added); used for accurate link counting; memberOfHousehold now uses it
+- **_add_to_relation**: logger.warning when value missing @id; returns bool for counting
+- **LinkResult**: modified_entities → processed_entities
 - **link_dwelling**: Single atomic entry point; docstring clarified; DryRunResult always includes families
-- **link_household_relationships**: Honest family count via filtered set; removed redundant ValueError catch
+- **link_household_relationships**: residents_linked → links_created; status "no_links_created" when 0 links; logical status codes
 - **search_by_dwelling**: dwelling_number < 1 validation moved into store (single source of truth); server lets ValueError propagate
 - **test_link_household_dry_run**: Uses `with open(...) as f` for file operations
 
