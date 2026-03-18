@@ -139,6 +139,13 @@ def test_social_graph_links() -> None:
     assert farmer is not None
     assert member_of.get("@id") == farmer.get("@id")
     assert member_of.get("relationshipDescription") == "Boarder"
+    knows = blacksmith.get("knows")
+    head_knows_ref = next(
+        (k for k in (knows if isinstance(knows, list) else [knows]) if isinstance(k, dict) and k.get("@id") == farmer.get("@id")),
+        None,
+    )
+    assert head_knows_ref is not None, "Boarder must have knows link to Head"
+    assert head_knows_ref.get("relationshipDescription") == "Boarder", "relationshipDescription in persisted knows"
 
 
 def test_multi_relation_household() -> None:
@@ -257,6 +264,19 @@ def test_multi_relation_household() -> None:
     assert _moh_head_id(boarder1) == head_id
     assert _moh_head_id(boarder2) == head_id
 
+    def _first_moh(entity: dict) -> dict | None:
+        moh = entity.get("memberOfHousehold")
+        if isinstance(moh, list) and moh and isinstance(moh[0], dict):
+            return moh[0]
+        return moh if isinstance(moh, dict) else None
+
+    for b in (boarder1, boarder2):
+        moh = _first_moh(b)
+        assert moh is not None and moh.get("relationshipDescription") == "Boarder"
+        knows = b.get("knows")
+        k = next((x for x in (knows if isinstance(knows, list) else [knows]) if isinstance(x, dict) and x.get("@id") == head_id), None)
+        assert k is not None and k.get("relationshipDescription") == "Boarder"
+
 
 def test_dry_run_symmetry() -> None:
     """Proposed links includes symmetric back-links (e.g., Head->Wife and Wife->Head)."""
@@ -329,11 +349,12 @@ def test_link_household_dry_run() -> None:
 
 
 def test_search_by_dwelling_tool() -> None:
-    """search_by_dwelling rejects dwelling_number < 1 with standard ValueError."""
-    with pytest.raises(ValueError, match="dwelling_number must be >= 1"):
-        search_by_dwelling(0)
-    with pytest.raises(ValueError, match="dwelling_number must be >= 1"):
-        search_by_dwelling(-1)
+    """search_by_dwelling returns structured error for dwelling_number < 1."""
+    for invalid in (0, -1):
+        result = search_by_dwelling(invalid)
+        assert result.get("status") == "error"
+        assert "message" in result
+        assert "dwelling_number" in result.get("message", "").lower()
 
 
 def test_link_invalid_dwelling_id() -> None:

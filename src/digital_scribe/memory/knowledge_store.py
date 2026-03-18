@@ -172,11 +172,13 @@ def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict]
             })
             if not dry_run:
                 moh_val = {"@id": head_id, "relationshipDescription": rel_raw}
+                knows_head = {"@id": head_id, "relationshipDescription": rel_raw}
+                knows_member = {"@id": member_id, "relationshipDescription": rel_raw}
                 if _add_to_relation(entity, "memberOfHousehold", moh_val):
                     links_created += 1
-                if _add_to_relation(entity, "knows", {"@id": head_id}):
+                if _add_to_relation(entity, "knows", knows_head):
                     links_created += 1
-                if _add_to_relation(head, "knows", {"@id": member_id}):
+                if _add_to_relation(head, "knows", knows_member):
                     links_created += 1
     return (proposed, links_created)
 
@@ -477,4 +479,4 @@ class JSONLDStore:
             if dry_run:
                 return {"proposed_links": all_proposed, "families": len(by_family)}
             self._save_graph(entities)
-        return {"processed_entities": residents, "links_created": total_links}
+            return {"processed_entities": residents, "links_created": total_links}

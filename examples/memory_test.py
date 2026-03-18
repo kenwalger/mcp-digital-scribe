@@ -136,6 +136,22 @@ async def main() -> None:
                 sys.exit(1)
             print("\n✓ Memory lifecycle validated: Capture → Resolve → Ingest → Recall")
 
+            # Social Graph: link household relationships
+            link_result = await session.call_tool(
+                "link_household_relationships",
+                arguments={"dwelling_number": 1},
+            )
+            link_data = _extract_record_from_result(link_result)
+            if link_data and link_data.get("status") in ("linked", "no_links_created"):
+                links = link_data.get("links_created", 0)
+                print(f"\nSocial Graph (dwelling 1): {links} link(s) created")
+                for r in residents:
+                    name = " ".join(filter(None, [r.get("givenName"), r.get("familyName")])) or "?"
+                    rel = r.get("censusRelationshipToHead", "?")
+                    print(f"  - {name} ({rel})")
+            elif link_data and link_data.get("status") == "error":
+                print(f"\nSocial Graph: {link_data.get('message', 'Unknown error')}", file=sys.stderr)
+
             # Verify test archive is valid JSON-LD for Schema Markup Validator
             archive_text = TEST_ARCHIVE.read_text(encoding="utf-8")
             parsed = json.loads(archive_text)

@@ -207,6 +207,8 @@ def search_by_dwelling(dwelling_number: int) -> dict[str, Any]:
     """
     try:
         results = _get_knowledge_store().search_by_dwelling(dwelling_number)
+    except ValueError as e:
+        return {"status": "error", "message": str(e)}
     except ArchiveCorruptionError:
         return {
             "status": "error",

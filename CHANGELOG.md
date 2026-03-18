@@ -13,12 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **test_link_invalid_dwelling_id**: link_household_relationships(dwelling_number=0) raises ValueError
 - **test_link_multi_family_dwelling_atomicity**: Two families in one dwelling; both linked in single call
 - **test_link_household_dry_run**: Verifies dry run returns proposed links and leaves archive unchanged (hash comparison)
-- **test_search_by_dwelling_tool**: Verifies dwelling_number < 1 raises ValueError
+- **test_search_by_dwelling_tool**: Verifies dwelling_number < 1 returns structured error
 - **test_multi_relation_household**: Head + Wife + two Boarders; verifies symmetric spouse, Head knows both boarders, no data overwritten
 - **Social Graph (Extended Household)**: `link_dwelling` in `knowledge_store.py` — Nuclear: Wife→spouse, Son/Daughter→parent to Head. Extended: Boarder/Servant/Employee/Cook→`memberOfHousehold` + `schema:knows` to Head. All links include `relationshipDescription` to preserve census term
 - **search_by_dwelling**: Returns all residents in a dwelling (physical building); critical for "Mapping the Block" / multi-family dwellings
 - **link_household_relationships tool**: MCP tool groups by `family_number` (handles multiple heads in one dwelling), links households. Dry Run mode returns proposed links without writing
-- **test_social_graph_links**: Ingest Head (Farmer) + Boarder (Blacksmith), link household, verify Blacksmith has `memberOfHousehold` to Farmer
+- **memory_test**: Social Graph section — link_household_relationships, shows linked individuals with historical roles
+- **test_social_graph_links**: Asserts relationshipDescription in persisted memberOfHousehold and knows
 
 ### Changed
 
@@ -28,7 +29,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **link_dwelling**: Single atomic entry point; WARNING when resident excluded (invalid censusFamilyNumber)
 - **_process_family_links**: Dry-run proposed_links mirrors write path 1:1; _resolve_entity_id for non-null IDs
 - **link_household_relationships**: Dispatch via dry_run param; no key-checking
-- **search_by_dwelling**: dwelling_number < 1 validation moved into store (single source of truth); server lets ValueError propagate
+- **_process_family_links**: knows/memberOfHousehold write path includes relationshipDescription (metadata parity with dry-run)
+- **link_dwelling**: Final return moved inside with self._lock for symmetry
+- **search_by_dwelling**: try/except ValueError returns {"status": "error", "message": str(e)}; aligns with corruption handling
 - **test_link_household_dry_run**: Uses `with open(...) as f` for file operations
 
 ### Removed
