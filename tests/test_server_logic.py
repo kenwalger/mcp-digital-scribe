@@ -366,6 +366,65 @@ def test_link_invalid_dwelling_id() -> None:
         assert "dwelling_number" in result.get("message", "").lower()
 
 
+def test_spouse_husband_relationship() -> None:
+    """Female Head + Husband get symmetric spouse links (gender-neutral logic)."""
+    dwelling = 12
+    ingest_resident({
+        "dwelling_number": dwelling,
+        "family_number": 6,
+        "name": "Jane Doe",
+        "relationship_to_head": "Head",
+        "marital_status": "Married",
+        "occupation": "Farmer",
+        "birthplace": "Ohio",
+        "handwriting_confidence": 0.9,
+    })
+    ingest_resident({
+        "dwelling_number": dwelling,
+        "family_number": 6,
+        "name": "John Doe",
+        "relationship_to_head": "Husband",
+        "marital_status": "Married",
+        "occupation": "Laborer",
+        "birthplace": "Pennsylvania",
+        "handwriting_confidence": 0.92,
+    })
+    result = link_household_relationships(dwelling_number=dwelling, dry_run=False)
+    assert result.get("status") == "linked"
+    assert result.get("families") == 1
+
+    recall = cross_reference_resident(family_number=6)
+    residents = recall.get("residents", [])
+    jane = next((r for r in residents if r.get("givenName") == "Jane"), None)
+    john = next((r for r in residents if r.get("givenName") == "John"), None)
+    assert jane is not None and john is not None
+
+    def _spouse_ids(p: dict) -> list[str]:
+        s = p.get("spouse")
+        if isinstance(s, list):
+            return [x.get("@id") for x in s if isinstance(x, dict) and x.get("@id")]
+        return [s.get("@id")] if isinstance(s, dict) and s.get("@id") else []
+
+    assert john.get("@id") in _spouse_ids(jane), "Female Head must have spouse link to Husband"
+    assert jane.get("@id") in _spouse_ids(john), "Husband must have spouse link to Head"
+
+
+def test_relation_promotion() -> None:
+    """Existing string ID in relation field is promoted to dict when second relationship added."""
+    from digital_scribe.memory.knowledge_store import _add_to_relation
+
+    entity: dict = {"@id": "urn:uuid:head", "knows": "urn:uuid:boarder1"}
+    added = _add_to_relation(entity, "knows", {"@id": "urn:uuid:boarder2", "relationshipDescription": "Boarder"})
+    assert added is True
+    knows = entity.get("knows")
+    assert isinstance(knows, list)
+    assert len(knows) == 2
+    assert all(isinstance(k, dict) and k.get("@id") for k in knows)
+    ids = [k.get("@id") for k in knows]
+    assert "urn:uuid:boarder1" in ids
+    assert "urn:uuid:boarder2" in ids
+
+
 def test_link_multi_family_dwelling_atomicity() -> None:
     """Two families in one dwelling; both linked correctly in a single tool call."""
     dwelling = 10

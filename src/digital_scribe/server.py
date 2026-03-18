@@ -244,7 +244,7 @@ def link_household_relationships(dwelling_number: int, dry_run: bool = False) ->
         if not processed:
             return {"status": "no_residents", "dwelling_number": dwelling_number}
         links_created = result["links_created"]
-        family_count = len({e.get("censusFamilyNumber") for e in processed if e.get("censusFamilyNumber")})
+        family_count = len({fn for e in processed if (fn := e.get("censusFamilyNumber")) and fn >= 1})
         status = "linked" if links_created > 0 else "no_links_created"
         return {
             "status": status,

@@ -44,12 +44,20 @@ class ArchiveCorruptionError(RuntimeError):
     """
 
 
+def _ensure_relation_dict(item: str | dict) -> dict:
+    """Normalize a relation item to a dict with @id. Strings become {"@id": val}."""
+    if isinstance(item, dict):
+        return item
+    return {"@id": item} if isinstance(item, str) else {"@id": str(item)}
+
+
 def _add_to_relation(entity: dict, property_name: str, value: dict) -> bool:
     """Append a relation value without overwriting existing entries.
 
     If entity[property_name] does not exist, sets it to [value].
-    If it is a single string/dict, converts to list with [old, value].
-    If already a list, appends value only if not already present (deduplication by @id).
+    If it is a single string (bare @id), converts to {"@id": existing_val} then [that, value].
+    If it is a single dict or list, normalizes to list of dicts (strings promoted to dicts).
+    Ensures property is always a list of dicts, never a mix of strings and dicts.
 
     Returns True if a new pointer was added, False if skipped (duplicate).
     """
@@ -67,25 +75,26 @@ def _add_to_relation(entity: dict, property_name: str, value: dict) -> bool:
         entity[property_name] = [value]
         return True
 
+    # Normalize to list of dicts
+    if isinstance(existing, str):
+        if existing == target_id:
+            return False
+        entity[property_name] = [{"@id": existing}, value]
+        return True
+
     if isinstance(existing, dict):
         if existing.get("@id") == target_id:
             return False
         entity[property_name] = [existing, value]
         return True
 
-    if isinstance(existing, str):
-        if existing == target_id:
-            return False
-        entity[property_name] = [existing, value]
-        return True
-
     if isinstance(existing, list):
-        for item in existing:
-            if isinstance(item, dict) and item.get("@id") == target_id:
+        normalized: list[dict] = [_ensure_relation_dict(i) for i in existing]
+        for item in normalized:
+            if item.get("@id") == target_id:
                 return False
-            if item == target_id:
-                return False
-        existing.append(value)
+        normalized.append(value)
+        entity[property_name] = normalized
         return True
     return False
 
@@ -121,7 +130,7 @@ def _process_family_links(family: list[dict], dry_run: bool) -> tuple[list[dict]
         rel_raw = (entity.get("censusRelationshipToHead") or "").strip()
         rel_lower = rel_raw.lower()
 
-        if rel_lower == "wife":
+        if rel_lower in ("wife", "husband"):
             proposed.append({
                 "from_id": member_id,
                 "to_id": head_id,

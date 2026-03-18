@@ -9,10 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **test_spouse_husband_relationship**: Verifies female Head + Husband get symmetric spouse links (gender-neutral logic)
+- **test_relation_promotion**: Verifies bare string @id in relation field promoted to dict when second relationship added
 - **Social Graph demo**: memory_test calls search_by_dwelling after link_household_relationships; displays actual Spouse/Parent/Knows/MemberOfHousehold links from fresh data
 
 ### Changed
 
+- **_add_to_relation**: String (bare @id) normalized to {"@id": val} before list; ensures property always list of dicts, never mix
+- **_process_family_links**: Spouse detection now includes "husband" (gender-neutral; wife and husband both link)
+- **link_household_relationships**: family_count filter uses `fn >= 1` to match store linking logic; excludes negative numbers
 - **memory_test Social Graph**: Removed stale residents usage; post-linking search_by_dwelling now drives display of created links
 - **link_household_relationships**: try/except ValueError returns {"status": "error", "message": str(e)}; symmetric with search_by_dwelling
 - **test_link_invalid_dwelling_id**: Asserts structured error for dwelling_number < 1 (no longer expects raised ValueError)
